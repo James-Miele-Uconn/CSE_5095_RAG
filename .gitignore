@@ -5,7 +5,7 @@ chroma_db_files/*
 !chroma_db_files/(0)modified-times/
 
 # Exclude all context files, and folder for old context files, but not the structural folders
-context_files/old/
+context_files/alt/
 context_files/csv_files/*
 context_files/pdf_files/*
 !context_files/

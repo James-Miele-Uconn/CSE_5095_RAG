@@ -169,19 +169,18 @@ MODIFIED_ROOT = os.path.join(CHROMA_ROOT, "(0)modified-times\\")
 OUTPUT_ROOT = os.path.join(PROJECT_ROOT, "output_files\\")
 
 # Create structural directories, if they don't exist
-roots = [CONTEXT_ROOT, PDF_ROOT, CSV_ROOT, CHROMA_ROOT, MODIFIED_ROOT, OUTPUT_ROOT]
-need_context = False
+context_roots = [PDF_ROOT, CSV_ROOT]
+roots = [CHROMA_ROOT, MODIFIED_ROOT, OUTPUT_ROOT, CONTEXT_ROOT] + context_roots
 for root in roots:
     if not os.path.exists(root):
         try:
             os.mkdir(root)
-            need_context = True
         except Exception as e:
             print(f"Error making {root}:\n{e}")
             exit(1)
 
 # Determine if context directories are empty
-context_roots = [PDF_ROOT, CSV_ROOT]
+need_context = False
 for root in context_roots:
     if not os.listdir(root):
         need_context = True
