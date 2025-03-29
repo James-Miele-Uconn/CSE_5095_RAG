@@ -144,9 +144,9 @@ def parse_arguments():
       All arguments that can be set through the cmd.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--embedding", metavar="", help="what embedding model to use. Default is mxbai-embed-large.", default="mxbai-embed-large", type=str)
-    parser.add_argument("--model", metavar="", help="what chat model to use. Default is deepseek-r1:32b", default="deepseek-r1:32b", type=str)
-    parser.add_argument("--num_docs", metavar="", help="how many context documents to use. Default is five.", default=5, type=int)
+    parser.add_argument("--embedding", metavar="", help="\twhat embedding model to use. Default is mxbai-embed-large.", default="mxbai-embed-large", type=str)
+    parser.add_argument("--model", metavar="", help="\twhat chat model to use. Default is deepseek-r1:32b", default="deepseek-r1:32b", type=str)
+    parser.add_argument("--num_docs", metavar="", help="\thow many context chunks to use. Default is 5 chunks.", default=5, type=int)
     args = parser.parse_args()
 
     return args
