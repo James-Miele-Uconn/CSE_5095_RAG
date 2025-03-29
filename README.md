@@ -13,5 +13,5 @@ Arguments for main file: <br />
 &emsp; The chat model to use. <br />
 &emsp; Default is deepseek-r1:32b <br />
 --num_docs <br />
-&emsp; How many context documents to use. <br />
-&emsp; Default is 5 documents. <br />
+&emsp; How many context document chunks to use. <br />
+&emsp; Default is 5 chunks. <br />
