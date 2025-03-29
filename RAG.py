@@ -161,11 +161,36 @@ args = parse_arguments()
 EMBEDDING_ROOT = "D:\\Desktop\\AI\\Embeddings\\"
 MODEL_ROOT = "D:\\Desktop\\AI\\LLMs\\"
 PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
-PDF_ROOT = os.path.join(PROJECT_ROOT, "context_files\\pdf_files\\")
-CSV_ROOT = os.path.join(PROJECT_ROOT, "context_files\\csv_files\\")
+CONTEXT_ROOT = os.path.join(PROJECT_ROOT, "context_files\\")
+PDF_ROOT = os.path.join(CONTEXT_ROOT, "pdf_files\\")
+CSV_ROOT = os.path.join(CONTEXT_ROOT, "csv_files\\")
 CHROMA_ROOT = os.path.join(PROJECT_ROOT, "chroma_db_files\\")
 MODIFIED_ROOT = os.path.join(CHROMA_ROOT, "(0)modified-times\\")
 OUTPUT_ROOT = os.path.join(PROJECT_ROOT, "output_files\\")
+
+# Create structural directories, if they don't exist
+roots = [CONTEXT_ROOT, PDF_ROOT, CSV_ROOT, CHROMA_ROOT, MODIFIED_ROOT, OUTPUT_ROOT]
+need_context = False
+for root in roots:
+    if not os.path.exists(root):
+        try:
+            os.mkdir(root)
+            need_context = True
+        except Exception as e:
+            print(f"Error making {root}:\n{e}")
+            exit(1)
+
+# Determine if context directories are empty
+context_roots = [PDF_ROOT, CSV_ROOT]
+for root in context_roots:
+    if not os.listdir(root):
+        need_context = True
+
+# Check if context documents need to be added
+if need_context:
+    print("\nYou have not supplied any documents to be used as context information.")
+    print("Please do so before using this system.")
+    exit(1)
 
 # Embedding to use, determines if running online
 ollama_embeddings = ["nomic-embed-text", "mxbai-embed-large"]
