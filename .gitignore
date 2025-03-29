@@ -1,0 +1,16 @@
+# Exclude ChromaDB files and last modified time files, but not the structural folders
+chroma_db_files/(0)modified-times/*
+chroma_db_files/*
+!chroma_db_files/(0)modified-times/
+
+# Exclude all context files, and folder for old context files, but not the structural folders
+context_files/old/
+context_files/csv_files/*
+context_files/pdf_files/*
+
+# Exclude all output files, but not the output file folder
+output_files/*
+
+# Exclude any files created by running code
+.ipynb_checkpoints/
+__pycache__/
