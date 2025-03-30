@@ -205,10 +205,6 @@ local_models = ["bert-base-uncased", "gpt2", "Mistral-7B-Instruct-v0.3", "zephyr
 online_models = ["openai"]
 model_choice = args.model
 
-# Flag to determine if Chroma should load from persistent directory
-context_locs = [PDF_ROOT, CSV_ROOT]
-chroma_load = set_chroma_load(MODIFIED_ROOT, CHROMA_ROOT, embeddings_choice, other_locs=context_locs)
-
 # Flag to determine if program is running locally or not
 local = True
 if ((embeddings_choice == "openai") or (model_choice == "openai")):
@@ -239,6 +235,8 @@ else:
         embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_KEY)
 
 # Set up ChromaDB based on whether or not pre-saved information should be used
+context_locs = [PDF_ROOT, CSV_ROOT]
+chroma_load = set_chroma_load(MODIFIED_ROOT, CHROMA_ROOT, embeddings_choice, other_locs=context_locs)
 if chroma_load:
     db_chroma = Chroma(embedding_function=embeddings, persist_directory=cur_embed_db)
 else:
