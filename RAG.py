@@ -269,37 +269,42 @@ else:
 
 """Receive answer to a query, with ability to save to .txt file."""
 
-while True:
-    # Receive response to query
-    print("\n\n\n\n\n\n\n\nWelcome to the experimental RAG system! Enter a prompt, or 'exit' to exit.")
-    print("\nHow can I help?\n")
-    query = input()
+try:
+    while True:
+        # Receive response to query
+        print("\n\n\n\n\n\n\n\nWelcome to the experimental RAG system! Enter a prompt, or 'exit' to exit.")
+        print("\nHow can I help?\n")
+        query = input()
 
-    if query.lower() == "exit":
-        print("\nThank you for using the RAG system. Goodbye!")
-        exit()
+        if query.lower() == "exit":
+            break
 
-    response = answer_query(query, db_chroma, args.num_docs)
+        response = answer_query(query, db_chroma, args.num_docs)
 
-    # Create output for question and response
-    output = "\n"
+        # Create output for question and response
+        output = "\n"
 
-    # Extract string of response, if needed
-    if not isinstance(response, str):
-        response = response.content
+        # Extract string of response, if needed
+        if not isinstance(response, str):
+            response = response.content
 
-    # Add response to output
-    if local:
-        if (model_choice == "Mistral-7B-Instruct-v0.3"):
-            prompt_end = response.find("[/INST]")
-            output += response[(prompt_end + 7):]
-        elif ("deepseek-r1" in model_choice):
-            think_end = response.find("</think>")
-            output += response[(think_end + 8):]
+        # Add response to output
+        if local:
+            if (model_choice == "Mistral-7B-Instruct-v0.3"):
+                prompt_end = response.find("[/INST]")
+                output += response[(prompt_end + 7):]
+            elif ("deepseek-r1" in model_choice):
+                think_end = response.find("</think>")
+                output += response[(think_end + 8):]
+            else:
+                output += response
         else:
             output += response
-    else:
-        output += response
 
-    # Print response for convenience
-    print(output)
+        # Print response for convenience
+        print(output)
+except KeyboardInterrupt:
+    pass
+finally:
+    print("\nThank you for using the RAG system. Goodbye!")
+    exit()
