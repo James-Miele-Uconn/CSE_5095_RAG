@@ -15,6 +15,7 @@ from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline, Ch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from time import time, gmtime, strftime
 from sys import exit
+from shutil import rmtree
 import os, argparse
 
 
@@ -241,6 +242,20 @@ else:
 if chroma_load:
     db_chroma = Chroma(embedding_function=embeddings, persist_directory=cur_embed_db)
 else:
+    # Remove old folder
+    try:
+        rmtree(cur_embed_db)
+    except Exception as e:
+        print(f"Error:\n{e}")
+        exit(1)
+    
+    # Create new folder
+    try:
+        os.mkdir(cur_embed_db)
+    except Exception as e:
+        print(f"Error:\n{e}")
+        exit(1)
+
     # Give context information to Chroma
     # Not sure best way to handle, so create Chroma with first set of documents, then add any other documents
     chunks = load_and_chunk(pdf_loc=PDF_ROOT, csv_loc=CSV_ROOT)
