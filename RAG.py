@@ -282,42 +282,50 @@ else:
 
 """Receive answer to a query, with ability to save to .txt file."""
 
-try:
-    while True:
-        # Receive response to query
-        print("\n\n\n\n\n\n\n\nWelcome to the experimental RAG system! Enter a prompt, or 'exit' to exit.")
-        print("\nHow can I help?\n")
-        query = input()
+while True:
+    # Receive response to query
+    print("\n\n\n\n\nWelcome to the experimental RAG system! Enter a prompt, or 'exit' to exit.")
+    print("\nHow can I help?\n")
 
-        if query.lower() == "exit":
+    query = None
+    try:
+        query = input()
+    except KeyboardInterrupt as e:
+        if query is not None:
+            pass
+        else:
             break
 
-        response = answer_query(query, db_chroma, args.num_docs)
+    if query.lower() == "exit":
+        break
+    elif query == "":
+        print("Please enter a query.")
+        continue
 
-        # Create output for question and response
-        output = "\n"
+    response = answer_query(query, db_chroma, args.num_docs)
 
-        # Extract string of response, if needed
-        if not isinstance(response, str):
-            response = response.content
+    # Create output for question and response
+    output = "\n"
 
-        # Add response to output
-        if local:
-            if (model_choice == "Mistral-7B-Instruct-v0.3"):
-                prompt_end = response.find("[/INST]")
-                output += response[(prompt_end + 7):]
-            elif ("deepseek-r1" in model_choice):
-                think_end = response.find("</think>")
-                output += response[(think_end + 8):]
-            else:
-                output += response
+    # Extract string of response, if needed
+    if not isinstance(response, str):
+        response = response.content
+
+    # Add response to output
+    if local:
+        if (model_choice == "Mistral-7B-Instruct-v0.3"):
+            prompt_end = response.find("[/INST]")
+            output += response[(prompt_end + 7):]
+        elif ("deepseek-r1" in model_choice):
+            think_end = response.find("</think>")
+            output += response[(think_end + 8):]
         else:
             output += response
+    else:
+        output += response
 
-        # Print response for convenience
-        print(output)
-except KeyboardInterrupt:
-    pass
-finally:
-    print("\nThank you for using the RAG system. Goodbye!")
-    exit()
+    # Print response for convenience
+    print(output)
+
+print("\nThank you for using the RAG system!")
+exit()
