@@ -19,39 +19,36 @@ from shutil import rmtree
 import os, argparse
 
 
-def load_and_chunk(pdf_loc=None, csv_loc=None):
-    """Load and chunk documents from specified locations, for use with ChromaDB RAG system.
+def load_and_chunk(splitter, pdf_loc=None, csv_loc=None):
+    """Load and chunk documents from specified locations.
 
     Args:
-      pdf_loc: path to directory containing pdf file(s)
-      csv_loc: path to directory containing csv file(s)
+      splitter: The text splitter to use.
+      pdf_loc: Path to directory containing pdf file(s).
+      csv_loc: Path to directory containing csv file(s).
     
     Returns:
-      list of documents to use with Chroma
+      Dictionary of chunked documents
     """
-
-    # Set up splitter
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-
     # Load pdf documents
     pdf_chunks = None
     if pdf_loc:
       pdf_loader = PyPDFDirectoryLoader(pdf_loc)
       pdf_pages = pdf_loader.load()
-      pdf_chunks = text_splitter.split_documents(pdf_pages)
+      pdf_chunks = splitter.split_documents(pdf_pages)
 
     # Load csv documents
     csv_chunks = None
     if csv_loc:
       csv_loader = DirectoryLoader(csv_loc)
       csv_pages = csv_loader.load()
-      csv_chunks = text_splitter.split_documents(csv_pages)
+      csv_chunks = splitter.split_documents(csv_pages)
 
-    output = []
+    output = {'pdf': None, 'csv': None, 'txt': None}
     if pdf_chunks:
-      output.append(pdf_chunks)
+      output['pdf'] = pdf_chunks
     if csv_chunks:
-      output.append(csv_chunks)
+      output['csv'] = csv_chunks
 
     return output
 
@@ -256,10 +253,12 @@ else:
 
     # Give context information to Chroma
     # Not sure best way to handle, so create Chroma with first set of documents, then add any other documents
-    chunks = load_and_chunk(pdf_loc=PDF_ROOT, csv_loc=CSV_ROOT)
-    db_chroma = Chroma.from_documents(chunks[0], embeddings, persist_directory=cur_embed_db)
-    for i in range(1, len(chunks)):
-        db_chroma.add_documents(documents=chunks[i])
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    chunks = load_and_chunk(text_splitter, pdf_loc=PDF_ROOT, csv_loc=CSV_ROOT)
+    db_chroma = Chroma.from_documents(chunks['pdf'], embeddings, persist_directory=cur_embed_db)
+    for key in chunks.keys():
+        if chunks[key] is not None:
+            db_chroma.add_documents(documents=chunks[key])
 
     # Save current time as last modified time for context information for this embedding
     with open(f"{MODIFIED_ROOT}{embeddings_choice}.txt", "w") as outf:
