@@ -3,7 +3,7 @@
 from huggingface_hub import notebook_login
 from langchain_community.document_loaders import TextLoader, PyPDFDirectoryLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings.openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -165,10 +165,11 @@ CSV_ROOT = os.path.join(CONTEXT_ROOT, "csv_files\\")
 CHROMA_ROOT = os.path.join(PROJECT_ROOT, "chroma_db_files\\")
 MODIFIED_ROOT = os.path.join(CHROMA_ROOT, "(0)modified-times\\")
 OUTPUT_ROOT = os.path.join(PROJECT_ROOT, "output_files\\")
+API_ROOT = os.path.join(PROJECT_ROOT, "api_keys\\")
 
 # Create structural directories, if they don't exist
 context_roots = [PDF_ROOT, CSV_ROOT]
-roots = [CHROMA_ROOT, MODIFIED_ROOT, OUTPUT_ROOT, CONTEXT_ROOT] + context_roots
+roots = [CHROMA_ROOT, MODIFIED_ROOT, OUTPUT_ROOT, API_ROOT, CONTEXT_ROOT] + context_roots
 for root in roots:
     if not os.path.exists(root):
         try:
@@ -207,8 +208,19 @@ local = True
 if ((embeddings_choice == "openai") or (model_choice == "openai")):
     local = False
 
-# For api keys
-OPENAI_KEY = "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"
+# Setup api keys
+api_keys = dict()
+if not local:
+    # Check if a csv file containing api keys exists
+    if not os.listdir(API_ROOT):
+        print("\nYou have chosen to use an online model but have not provided any api keys.")
+        print("Please do so before using this system.")
+        exit(1)
+
+    with open(os.path.join(API_ROOT, os.listdir(API_ROOT)[0])) as inf:
+        for line in inf:
+            parts = line.strip().split(',')
+            api_keys[parts[0]] = parts[1]
 
 
 """Generate embeddings and manage vectors."""
@@ -229,7 +241,7 @@ if local:
         embeddings = HuggingFaceEmbeddings(model_name=f"{EMBEDDING_ROOT}{embeddings_choice}\\", model_kwargs=model_kwargs)
 else:
     if (embeddings_choice == "openai"):
-        embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_KEY)
+        embeddings = OpenAIEmbeddings(openai_api_key=api_keys["openai"])
 
 # Set up ChromaDB based on whether or not pre-saved information should be used
 context_locs = [PDF_ROOT, CSV_ROOT]
@@ -276,14 +288,14 @@ if local:
         model = ChatHuggingFace(llm=llm)
 else:
     if (model_choice == "openai"):
-        model = ChatOpenAI(openai_api_key=OPENAI_KEY)
+        model = ChatOpenAI(openai_api_key=api_keys["openai"])
 
 
 """Receive answer to a query, with ability to save to .txt file."""
 
 while True:
     # Receive response to query
-    print("\n\n\n\n\nWelcome to the experimental RAG system! Enter a prompt, or 'exit' to exit.")
+    print("\n\nWelcome to the experimental RAG system! Enter a prompt, or 'exit' to exit.")
     print("\nHow can I help?\n")
 
     query = None
