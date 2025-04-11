@@ -15,3 +15,5 @@ Arguments for main file: <br />
 --num_docs <br />
 &emsp; How many context document chunks to use. <br />
 &emsp; Default is 5 chunks. <br />
+--refresh_db <br />
+&emsp; Force the database to be loaded from context files. <br />

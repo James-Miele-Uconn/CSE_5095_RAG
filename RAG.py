@@ -145,6 +145,7 @@ def parse_arguments():
     parser.add_argument("--embedding", metavar="", help="\twhat embedding model to use. Default is mxbai-embed-large.", default="mxbai-embed-large", type=str)
     parser.add_argument("--model", metavar="", help="\twhat chat model to use. Default is deepseek-r1:32b", default="deepseek-r1:7b", type=str)
     parser.add_argument("--num_docs", metavar="", help="\thow many context chunks to use. Default is 5 chunks.", default=5, type=int)
+    parser.add_argument("--refresh_db", help="\tforce the database to be remade.", action="store_true")
     args = parser.parse_args()
 
     return args
@@ -248,9 +249,15 @@ else:
     if (embeddings_choice == "openai"):
         embeddings = OpenAIEmbeddings(openai_api_key=api_keys["openai"])
 
-# Set up ChromaDB based on whether or not pre-saved information should be used
+
+# Determine if database should load saved files or be (re)made
 context_locs = [PDF_ROOT, CSV_ROOT]
-chroma_load = set_chroma_load(MODIFIED_ROOT, CHROMA_ROOT, embeddings_choice, other_locs=context_locs)
+if args.refresh_db:
+    chroma_load = False
+else:
+    chroma_load = set_chroma_load(MODIFIED_ROOT, CHROMA_ROOT, embeddings_choice, other_locs=context_locs)
+
+# Set up ChromaDB based on whether or not pre-saved information should be used
 if chroma_load:
     db_chroma = Chroma(embedding_function=embeddings, persist_directory=cur_embed_db)
 else:
