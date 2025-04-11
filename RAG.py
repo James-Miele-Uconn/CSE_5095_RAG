@@ -143,7 +143,7 @@ def parse_arguments():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--embedding", metavar="", help="\twhat embedding model to use. Default is mxbai-embed-large.", default="mxbai-embed-large", type=str)
-    parser.add_argument("--model", metavar="", help="\twhat chat model to use. Default is deepseek-r1:32b", default="deepseek-r1:32b", type=str)
+    parser.add_argument("--model", metavar="", help="\twhat chat model to use. Default is deepseek-r1:32b", default="deepseek-r1:7b", type=str)
     parser.add_argument("--num_docs", metavar="", help="\thow many context chunks to use. Default is 5 chunks.", default=5, type=int)
     args = parser.parse_args()
 
@@ -203,14 +203,19 @@ local_models = ["bert-base-uncased", "gpt2", "Mistral-7B-Instruct-v0.3", "zephyr
 online_models = ["openai"]
 model_choice = args.model
 
-# Flag to determine if program is running locally or not
-local = True
-if ((embeddings_choice == "openai") or (model_choice == "openai")):
-    local = False
+# Flag to determine if embedding model is local
+local_embed = True
+if embeddings_choice == "openai":
+    local_embed = False
+
+# Flag to determine if chat model is local
+local_model = True
+if model_choice == "openai":
+    local_model = False
 
 # Setup api keys
 api_keys = dict()
-if not local:
+if (not local_embed) or (not local_model):
     # Check if a csv file containing api keys exists
     if not os.listdir(API_ROOT):
         print("\nYou have chosen to use an online model but have not provided any api keys.")
@@ -233,7 +238,7 @@ if not os.path.exists(cur_embed_db):
     except Exception as e:
         print(f"Error:\n{e}")
         exit(1)
-if local:
+if local_embed:
     if (embeddings_choice in ollama_embeddings):
         embeddings = OllamaEmbeddings(model=embeddings_choice)
     elif (embeddings_choice in local_embeddings):
@@ -280,7 +285,7 @@ else:
     chroma_load = True
 
 # Set up model based on model_choice
-if local:
+if local_model:
     if (model_choice in ollama_models):
         model = ChatOllama(model=model_choice)
     elif (model_choice in local_models):
@@ -323,7 +328,7 @@ while True:
         response = response.content
 
     # Add response to output
-    if local:
+    if local_model:
         if (model_choice == "Mistral-7B-Instruct-v0.3"):
             prompt_end = response.find("[/INST]")
             output += response[(prompt_end + 7):]
