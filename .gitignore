@@ -16,6 +16,9 @@ context_files/pdf_files/*
 output_files/*
 !output_files/
 
+# Exclude all api keys
+api_keys/*
+
 # Exclude any files created by running code
 .ipynb_checkpoints/
 __pycache__/

@@ -3,9 +3,8 @@
 from huggingface_hub import notebook_login
 from langchain_community.document_loaders import TextLoader, PyPDFDirectoryLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings.openai import OpenAIEmbeddings
+from langchain_community.embeddings.openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
-from langchain_community.chat_models import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_chroma import Chroma
@@ -53,13 +52,14 @@ def load_and_chunk(splitter, pdf_loc=None, csv_loc=None):
     return output
 
 
-def answer_query(query, database, num_docs):
+def answer_query(query, database, num_docs, model):
     """Given a query, create a prompt and receive a response.
 
     Args:
       query: The query to answer.
       database: The colleciton of documents to use for RAG (assumes ChromaDB).
       num_docs: How many documents should be given as context information.
+      model: The model to which the prompt should be given.
     
     Returns:
       response received from the LLM model used
@@ -85,7 +85,7 @@ def answer_query(query, database, num_docs):
 
     # Get answer from LLM
     if (model_choice == "openai"):
-        response = model.predict(query)
+        response = model.invoke(query)
     else:
         if (model_choice in local_models):
             response = model.invoke(prompt)
