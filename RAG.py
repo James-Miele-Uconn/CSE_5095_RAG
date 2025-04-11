@@ -301,7 +301,7 @@ while True:
         print("Please enter a query.")
         continue
 
-    response = answer_query(query, db_chroma, args.num_docs)
+    response = answer_query(query, db_chroma, args.num_docs, model)
 
     # Create output for question and response
     output = "\n"
