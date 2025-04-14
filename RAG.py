@@ -33,8 +33,12 @@ def parse_arguments():
 
     return args
 
-def get_vars():
+def get_vars(embedding_choice=None, model_choice=None):
     """Define setup variables.
+
+    Args:
+      embedding_choice: Which embedding model to use. Defaults to None, to be overwritten.
+      model_choice: Which chat model to use. Defaults to None, to be overwritten.
 
     Returns:
       Dicitonary containing all variables to be used by other functions.
@@ -85,7 +89,8 @@ def get_vars():
         "local": ["nomic-embed-text-v1.5", "bert-base-uncased"],
         "online": ["openai"]
     }
-    embedding_choice = args.embedding
+    if embedding_choice is None:
+        embedding_choice = args.embedding
 
     # Model to use, determines if running online
     # Models: deepseek-r1:[7b|14b|32b|70b], llama3.3, mistral, mixtral:8x7b
@@ -94,7 +99,8 @@ def get_vars():
         "local": ["bert-base-uncased", "gpt2", "Mistral-7B-Instruct-v0.3", "zephyr-7b-beta", "DarkForest-20B-v3.0"],
         "online": ["openai"]
     }
-    model_choice = args.model
+    if model_choice is None:
+        model_choice = args.model
 
     # Flag to determine if embedding model is local
     local_embed = True
