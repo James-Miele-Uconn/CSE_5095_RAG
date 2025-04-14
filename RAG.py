@@ -33,12 +33,13 @@ def parse_arguments():
 
     return args
 
-def get_vars(embedding_choice=None, model_choice=None):
+def get_vars(embedding_choice=None, model_choice=None, num_docs=None):
     """Define setup variables.
 
     Args:
       embedding_choice: Which embedding model to use. Defaults to None, to be overwritten.
       model_choice: Which chat model to use. Defaults to None, to be overwritten.
+      num_docs: Number of chunks to use for answers. Defaults to None, as a flag for argparse.
 
     Returns:
       Dicitonary containing all variables to be used by other functions.
@@ -46,6 +47,10 @@ def get_vars(embedding_choice=None, model_choice=None):
 
     # Get arguments from command line
     args = parse_arguments()
+
+    # Modify num_docs if needed
+    if num_docs is not None:
+        args.num_docs = num_docs
 
     # Set directories to be used
     roots = dict()

@@ -16,10 +16,11 @@ def setup():
     cur_vars = {"embedding_choice": None, "model_choice": None}
     cur_vars["embedding_choice"] = request.form["embedding_choice"]
     cur_vars["model_choice"] = request.form["model_choice"]
+    num_docs = int(request.form["num_docs"])
 
     # Check if initial setup should happen
     if vars is None:
-        vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"])
+        vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
         embedding = load_embedding(vars)
         db = load_database(vars, embedding)
         model = load_model(vars)
@@ -29,14 +30,14 @@ def setup():
         for var in cur_vars.keys():
             if vars[var] != cur_vars[var]:
                 updates[var] = True
-        vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"])
+        vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
 
         # Update embedding model, if needed
         if updates["embedding_choice"]:
             embedding = load_embedding(vars)
             db = load_database(vars, embedding)
 
-        # Check if chat model needs updating
+        # Update chat model, if needed
         if updates["model_choice"]:
             model = load_model(vars)
     

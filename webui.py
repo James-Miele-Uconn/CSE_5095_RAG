@@ -21,9 +21,13 @@ def update_chat_opts(model_type):
     new_opts = models_dict[model_type.lower()]
     return gr.Dropdown(new_opts, value=new_opts[0])
 
-def run_rag(message, history, embedding_choice, model_choice):
+def run_rag(message, history, embedding_choice, model_choice, num_docs):
     # Send info for RAG system setup
-    setup_info = {"embedding_choice": embedding_choice, "model_choice": model_choice}
+    setup_info = {
+        "embedding_choice": embedding_choice,
+        "model_choice": model_choice,
+        "num_docs": num_docs
+    }
     resp = requests.post("http://127.0.0.1:5000/setup", data=setup_info)
     setup_status = resp.json()['status']
     if setup_status != "ok":
@@ -43,6 +47,8 @@ with gr.Blocks(title="RAG System") as app:
         with gr.Column():
             model_type = gr.Dropdown(["Ollama", "Local", "Online"], value="Ollama", label="Chat Model Type")
             model_choice = gr.Dropdown(models_dict["ollama"], value=models_dict["ollama"][0], label="Chat Model")
+        with gr.Column():
+            num_docs = gr.Slider(1, 10, value=5, step=1, label="Number of chunks to use")
     embedding_type.change(update_embedding_opts, inputs=[embedding_type], outputs=[embedding_choice])
     model_type.change(update_chat_opts, inputs=[model_type], outputs=model_choice)
 
@@ -60,7 +66,7 @@ with gr.Blocks(title="RAG System") as app:
             placeholder='Enter a query...',
             show_label=False
         ),
-        additional_inputs=[embedding_choice, model_choice],
+        additional_inputs=[embedding_choice, model_choice, num_docs],
     )
 
 if __name__ == "__main__":
