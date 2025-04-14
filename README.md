@@ -1,9 +1,12 @@
-# CSE_5095_RAG
-Run with "python RAG.py" <br />
+# CSE 5095 RAG System
 
-Jupyter Notebook file also provided, though no simple way to run it is provided. <br />
+To run the web-based UI, you need to start the backend RAG server and the frontend UI server. <br />
+Use "(0) rag_server.bat" and "(0) webui-user.bat" to start the backend and frontend servers, respectively <br />
+Alternatively, you can use the command-line version by calling "python RAG.py" <br />
 
-Arguments for main file: <br />
+A Jupyter Notebook version of the command-line option is also provided. <br />
+
+Arguments for command-line version file: <br />
 -h, --help <br />
 &emsp; Show help options. <br />
 --embedding <br />
