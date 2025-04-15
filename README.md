@@ -1,8 +1,7 @@
 # CSE 5095 RAG System
 
-To run the web-based UI, you need to start the backend RAG server and the frontend UI server. <br />
-Use "(0) rag_server.bat" and "(0) webui-user.bat" to start the backend and frontend servers, respectively <br />
-Alternatively, you can use the command-line version by calling "python RAG.py" <br />
+To run the web-based UI, use webui-user.bat. <br />
+Alternatively, for the command-line version use cmd-user.bat. <br />
 
 A Jupyter Notebook version of the command-line option is also provided. <br />
 
