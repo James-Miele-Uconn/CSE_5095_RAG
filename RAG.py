@@ -132,6 +132,9 @@ def get_vars(embedding_choice=None, model_choice=None, num_docs=None):
                 parts = line.strip().split(',')
                 api_keys[parts[0]] = parts[1]
     
+    chunk_size = 500
+    chunk_overlap = 50
+
     output = {
         "args": args,
         "roots": roots,
@@ -141,7 +144,9 @@ def get_vars(embedding_choice=None, model_choice=None, num_docs=None):
         "model_choice": model_choice,
         "local_embed": local_embed,
         "local_model": local_model,
-        "api_keys": api_keys
+        "api_keys": api_keys,
+        "chunk_size": chunk_size,
+        "chunk_overlap": chunk_overlap
     }
 
     return output
@@ -265,6 +270,8 @@ def load_database(vars, embedding):
     roots = vars["roots"]
     embedding_choice = vars["embedding_choice"]
     args = vars["args"]
+    chunk_size = vars["chunk_size"]
+    chunk_overlap = vars["chunk_overlap"]
 
     # Create directory for database using current embedding model, if needed
     cur_embed_db = os.path.join(roots["CHROMA_ROOT"], f"{embedding_choice}")
@@ -294,7 +301,7 @@ def load_database(vars, embedding):
             exit(1)
         
         # Give context information to database
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         chunks = load_and_chunk(text_splitter, pdf_loc=roots["PDF_ROOT"], csv_loc=roots["CSV_ROOT"])
         for key in chunks.keys():
             if chunks[key] is not None:

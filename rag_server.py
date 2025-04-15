@@ -19,7 +19,15 @@ def setup():
     cur_vars["embedding_choice"] = request.form["embedding_choice"]
     cur_vars["model_choice"] = request.form["model_choice"]
     num_docs = int(request.form["num_docs"])
+    chunk_size = int(request.form["chunk_size"])
+    chunk_overlap = int(request.form["chunk_overlap"])
     refresh_db = request.form["refresh_db"]
+
+    # Ensure variables are expected values
+    if chunk_size < 1:
+        chunk_size = 1
+    if chunk_overlap < 0:
+        chunk_overlap = 0
     if refresh_db.lower() == "true":
         refresh_db = True
     else:
@@ -28,6 +36,8 @@ def setup():
     # Check if initial setup should happen
     if vars is None:
         vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
+        vars["chunk_size"] = chunk_size
+        vars["chunk_overlap"] = chunk_overlap
         vars["args"].refresh_db = refresh_db
         embedding = load_embedding(vars)
         db = load_database(vars, embedding)
@@ -47,6 +57,8 @@ def setup():
 
         # Update database, if needed
         if refresh_db:
+            vars["chunk_size"] = chunk_size
+            vars["chunk_overlap"] = chunk_overlap
             vars["args"].refresh_db = refresh_db
             db = load_database(vars, embedding)
 
