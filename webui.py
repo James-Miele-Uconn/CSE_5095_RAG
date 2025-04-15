@@ -57,8 +57,16 @@ def run_rag(message, history, embedding_choice, model_choice, num_docs, refresh_
     response = resp.json()['response']
     return response
 
+# Specify theme to use
+theme =  gr.themes.Default(
+    primary_hue="rose",
+    secondary_hue="rose"
+).set(
+    color_accent_soft_dark='*primary_800'
+)
+
 # Layout for the UI
-with gr.Blocks(title="RAG System") as app:
+with gr.Blocks(title="RAG System", theme=theme) as app:
     # General options, to be displayed above the chatbox
     with gr.Row():
         with gr.Column():
@@ -96,4 +104,9 @@ with gr.Blocks(title="RAG System") as app:
 
 if __name__ == "__main__":
     # Allow use on local network, may add flag to either run locally or on network
-    app.launch(favicon_path='favicon.png', share=False, server_name="0.0.0.0", server_port=7860)
+    app.launch(
+        favicon_path='favicon.png',
+        share=False,
+        server_name="0.0.0.0",
+        server_port=7860
+    )

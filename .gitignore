@@ -22,3 +22,6 @@ api_keys/*
 # Exclude any files created by running code
 .ipynb_checkpoints/
 __pycache__/
+
+# Exclude builder file
+builder.py
