@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
+# Global variables to use
 vars = None
 embedding = None
 db = None
@@ -10,6 +11,7 @@ model = None
 
 @app.route("/setup", methods=["POST"])
 def setup():
+    """Ensure RAG system setup uses desired settings."""
     global vars, embedding, db, model
 
     # Get variables from frontend
@@ -17,10 +19,16 @@ def setup():
     cur_vars["embedding_choice"] = request.form["embedding_choice"]
     cur_vars["model_choice"] = request.form["model_choice"]
     num_docs = int(request.form["num_docs"])
+    refresh_db = request.form["refresh_db"]
+    if refresh_db.lower() == "true":
+        refresh_db = True
+    else:
+        refresh_db = False
 
     # Check if initial setup should happen
     if vars is None:
         vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
+        vars["args"].refresh_db = refresh_db
         embedding = load_embedding(vars)
         db = load_database(vars, embedding)
         model = load_model(vars)
@@ -37,6 +45,11 @@ def setup():
             embedding = load_embedding(vars)
             db = load_database(vars, embedding)
 
+        # Update database, if needed
+        if refresh_db:
+            vars["args"].refresh_db = refresh_db
+            db = load_database(vars, embedding)
+
         # Update chat model, if needed
         if updates["model_choice"]:
             model = load_model(vars)
@@ -46,6 +59,7 @@ def setup():
 
 @app.route("/", methods=["POST"])
 def main():
+    """Get response from RAG system to given query."""
     global vars, db, model
 
     # Get needed variables

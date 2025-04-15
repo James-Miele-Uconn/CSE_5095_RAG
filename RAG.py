@@ -282,39 +282,28 @@ def load_database(vars, embedding):
     else:
         chroma_load = set_chroma_load(roots["MODIFIED_ROOT"], roots["CHROMA_ROOT"], embedding_choice, other_locs=context_locs)
 
-    # Set up ChromaDB based on whether or not pre-saved information should be used
-    if chroma_load:
-        db = Chroma(embedding_function=embedding, persist_directory=cur_embed_db)
-    else:
-        # Remove old folder
+    # Load or build database
+    db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db)
+    if not chroma_load:
+        # Remove old database info
         try:
-            rmtree(cur_embed_db)
+            db._client.delete_collection(embedding_choice)
+            db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db)
         except Exception as e:
             print(f"Error:\n{e}")
             exit(1)
         
-        # Create new folder
-        try:
-            os.mkdir(cur_embed_db)
-        except Exception as e:
-            print(f"Error:\n{e}")
-            exit(1)
-
-        # Give context information to Chroma
-        # Not sure best way to handle, so create Chroma with first set of documents, then add any other documents
+        # Give context information to database
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
         chunks = load_and_chunk(text_splitter, pdf_loc=roots["PDF_ROOT"], csv_loc=roots["CSV_ROOT"])
-        db = Chroma.from_documents(chunks['pdf'], embedding, persist_directory=cur_embed_db)
         for key in chunks.keys():
-            if key == "pdf":
-                continue
             if chunks[key] is not None:
                 db.add_documents(documents=chunks[key])
-
+        
         # Save current time as last modified time for context information for this embedding
         with open(f"{roots['MODIFIED_ROOT']}{embedding_choice}.txt", "w") as outf:
             outf.write(f"{time()}")
-    
+
     return db
 
 
@@ -471,12 +460,9 @@ def query_loop(vars, db, model):
     return
 
 
-def main():
-    """Entry point for the program."""
-    vars = get_vars()
-    db, model = load_models_and_db(vars)
-    query_loop(vars, db, model)
-
-
 if __name__ == "__main__":
-    main()
+    vars = get_vars()
+    embedding = load_embedding(vars)
+    db = load_database(vars, embedding)
+    model = load_model(vars)
+    query_loop(vars, db, model)
