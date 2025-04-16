@@ -1,19 +1,9 @@
+from time import sleep
+from sys import exit
 import gradio as gr # type: ignore
 import requests
 
-css = """
-footer {visibility: hidden}
-"""
-
-# Specify theme to use
-theme =  gr.themes.Default(
-    primary_hue="rose",
-    secondary_hue="rose"
-).set(
-    color_accent_soft_dark='*primary_800',
-    border_color_primary_dark='*primary_800',
-    border_color_accent_dark='*primary_800'
-)
+need_restart = False
 
 # Options lists for each type of embedding model
 embeddings_dict = {
@@ -29,24 +19,34 @@ models_dict = {
     "online": ["openai"]
 }
 
-# Function to update embedding options based on currently chosen type
+def update_reload():
+    global need_restart
+    need_restart = True
+
+# Update theme color
+def update_theme_color(cur_color):
+    with open("./customization/theme_color.txt", "w") as outf:
+        outf.write(cur_color)
+
+# Update embedding options based on currently chosen type
 def update_embedding_opts(embedding_type):
     new_opts = embeddings_dict[embedding_type.lower()]
     return gr.Dropdown(new_opts, value=new_opts[0])
 
-# Function to update model options based on currently chosen type
+# Update model options based on currently chosen type
 def update_chat_opts(model_type):
     new_opts = models_dict[model_type.lower()]
     return gr.Dropdown(new_opts, value=new_opts[0])
 
+# Show or hide chunk options
 def show_chunk_opts(rebuild_val):
     new_size = gr.Number(visible=rebuild_val)
     new_overlap = gr.Number(visible=rebuild_val)
     new_reset = gr.Button(visible=rebuild_val)
 
     return [new_size, new_overlap, new_reset]
-    
 
+# Reset chunk options to default values
 def chunk_opt_defaults():
      return [gr.Number(value=500), gr.Number(value=50)]
 
@@ -99,127 +99,181 @@ def run_rag(message, history, use_history, embedding_choice, model_choice, num_d
 
     return response
 
+def get_setup_vars():
+    css = """
+    footer {visibility: hidden}
+    """
+
+    # Get currently set theme color
+    saved_color = "rose"
+    with open("./customization/theme_color.txt", "r") as inf:
+        saved_color = inf.readline().strip()
+
+    # Specify theme to use
+    theme =  gr.themes.Default(
+        primary_hue=saved_color,
+        secondary_hue=saved_color
+    ).set(
+        color_accent_soft_dark='*primary_800',
+        border_color_primary_dark='*primary_800',
+        border_color_accent_dark='*primary_950'
+    )
+
+    return (css, saved_color, theme)
+
+
 # Layout for the UI
-with gr.Blocks(title="RAG System", theme=theme, css=css) as app:
-    with gr.Row():
-        # Settings
-        with gr.Sidebar(width=500):
-            # Embedding model options
-            with gr.Column():
-                    embedding_type = gr.Radio(
-                        ["Ollama", "Local", "Online"],
-                        value="Ollama",
-                        label="Embedding Model Type"
+def setup_layout(css, saved_color, theme):
+    with gr.Blocks(title="RAG System", theme=theme, css=css) as app:
+        with gr.Row():
+            # Settings
+            with gr.Sidebar(width=500, open=False):
+                # Embedding model options
+                with gr.Column():
+                        embedding_type = gr.Radio(
+                            ["Ollama", "Local", "Online"],
+                            value="Ollama",
+                            label="Embedding Model Type"
+                        )
+                        embedding_choice = gr.Dropdown(
+                            embeddings_dict["ollama"],
+                            value=embeddings_dict["ollama"][0],
+                            label="Embedding Model"
+                        )
+
+                # Chat model options
+                with gr.Column():
+                        model_type = gr.Radio(
+                            ["Ollama", "Local", "Online"],
+                            value="Ollama",
+                            label="Chat Model Type"
+                        )
+                        model_choice = gr.Dropdown(
+                            models_dict["ollama"],
+                            value=models_dict["ollama"][0],
+                            label="Chat Model"
+                        )
+
+                # Various other common options
+                with gr.Column():
+                    num_docs = gr.Slider(
+                        1,
+                        10,
+                        value=5,
+                        step=1,
+                        label="Number of chunks to use when answering query"
                     )
-                    embedding_choice = gr.Dropdown(
-                        embeddings_dict["ollama"],
-                        value=embeddings_dict["ollama"][0],
-                        label="Embedding Model"
+                    use_history = gr.Checkbox(
+                        label="Add summary of chat history to query",
+                        value=False
                     )
 
-            # Chat model options
-            with gr.Column():
-                    model_type = gr.Radio(
-                        ["Ollama", "Local", "Online"],
-                        value="Ollama",
-                        label="Chat Model Type"
-                    )
-                    model_choice = gr.Dropdown(
-                        models_dict["ollama"],
-                        value=models_dict["ollama"][0],
-                        label="Chat Model"
+                # Database options
+                with gr.Group():
+                    refresh_db = gr.Checkbox(
+                        value=False,
+                        label="Force Rebuild Database"
                     )
 
-            # Various other common options
-            with gr.Column():
-                num_docs = gr.Slider(
-                    1,
-                    10,
-                    value=5,
-                    step=1,
-                    label="Number of chunks to use when answering query"
-                )
-                use_history = gr.Checkbox(
-                     label="Add summary of chat history to query",
-                     value=False
-                )
-
-            # Database options
-            with gr.Group():
-                refresh_db = gr.Checkbox(
-                    value=False,
-                    label="Force Rebuild Database"
-                )
-
-                with gr.Row():
                     with gr.Row():
-                        chunk_size = gr.Number(
-                            value=500,
-                            label="Chunk Size",
-                            info="Min value is 1.",
-                            scale=6,
-                            visible=False
-                        )
-                        chunk_overlap = gr.Number(
-                            value=50,
-                            label="Chunk Overlap",
-                            info="Min value is 0.",
-                            scale=6,
-                            visible=False
-                        )
-                        reset_chunk_opts = gr.Button(
-                            value="",
-                            icon="./imgs/reset.png",
-                            scale=1,
-                            min_width=0,
-                            visible=False
-                        )
+                        with gr.Row():
+                            chunk_size = gr.Number(
+                                value=500,
+                                label="Chunk Size",
+                                info="Min value is 1.",
+                                scale=6,
+                                visible=False
+                            )
+                            chunk_overlap = gr.Number(
+                                value=50,
+                                label="Chunk Overlap",
+                                info="Min value is 0.",
+                                scale=6,
+                                visible=False
+                            )
+                            reset_chunk_opts = gr.Button(
+                                value="",
+                                icon="./customization/reset.png",
+                                variant="primary",
+                                scale=1,
+                                min_width=0,
+                                visible=False
+                            )
 
-        # Chat interface
-        # Chatbox and Textbox specified to allow customization
-        with gr.Column(scale=2):
-            main_chat = gr.ChatInterface(
-                run_rag,
-                type="messages",
-                chatbot=gr.Chatbot(
+            # Chat interface
+            # Chatbox and Textbox specified to allow customization
+            with gr.Column(scale=2):
+                main_chat = gr.ChatInterface(
+                    run_rag,
                     type="messages",
-                    show_label=False,
-                    height=800,
-                    avatar_images=(None, None),
-                    value=[{"role": "assistant", "content": "Welcome to the experimental RAG system! How can I help?"}]
-                ),
-                textbox=gr.Textbox(
-                    type='text',
-                    placeholder='Enter a query...',
-                    show_label=False
-                ),
-                additional_inputs=[
-                    use_history,
-                    embedding_choice,
-                    model_choice,
-                    num_docs,
-                    chunk_size,
-                    chunk_overlap,
-                    refresh_db
-                ],
+                    chatbot=gr.Chatbot(
+                        type="messages",
+                        show_label=False,
+                        height=550,
+                        avatar_images=(None, None),
+                        value=[{"role": "assistant", "content": "Welcome to the experimental RAG system! How can I help?"}]
+                    ),
+                    textbox=gr.Textbox(
+                        type='text',
+                        placeholder='Enter a query...',
+                        show_label=False
+                    ),
+                    additional_inputs=[
+                        use_history,
+                        embedding_choice,
+                        model_choice,
+                        num_docs,
+                        chunk_size,
+                        chunk_overlap,
+                        refresh_db
+                    ],
+                )
+        
+        # Customization options
+        with gr.Sidebar(width=200, open=False, position="right"):
+            theme_color = gr.Dropdown(
+                ["slate", "gray", "zinc", "neutral", "stone", "red", "orange", "amber", "yellow", "lime", "green", "emerald", "teal", "cyan", "sky", "blue", "indigo", "violet", "purple", "fuchsia", "pink", "rose"],
+                value=saved_color,
+                label="Theme Color",
+                info="Change requires restart",
+                interactive=True
+            )
+            reload_app = gr.Button(
+                value="Reload UI"
             )
 
-    # Allow updating the embedding/chat model options based on the relevant type currently selected
-    embedding_type.change(update_embedding_opts, inputs=[embedding_type], outputs=[embedding_choice])
-    model_type.change(update_chat_opts, inputs=[model_type], outputs=model_choice)
+        # Allow updating the embedding/chat model options based on the relevant type currently selected
+        embedding_type.change(update_embedding_opts, inputs=[embedding_type], outputs=[embedding_choice])
+        model_type.change(update_chat_opts, inputs=[model_type], outputs=model_choice)
 
-    # Allow showing/hiding database options based on checkbox
-    refresh_db.change(show_chunk_opts, inputs=[refresh_db], outputs=[chunk_size, chunk_overlap, reset_chunk_opts])
+        # Allow showing/hiding database options based on checkbox
+        refresh_db.change(show_chunk_opts, inputs=[refresh_db], outputs=[chunk_size, chunk_overlap, reset_chunk_opts])
 
-    # Allow resetting chunk options to default values
-    reset_chunk_opts.click(chunk_opt_defaults, outputs=[chunk_size, chunk_overlap])
+        # Allow resetting chunk options to default values
+        reset_chunk_opts.click(chunk_opt_defaults, outputs=[chunk_size, chunk_overlap])
+
+        # Save color on theme color change
+        theme_color.change(update_theme_color, inputs=[theme_color])
+
+        reload_app.click(update_reload)
+
+    return app
+
 
 
 if __name__ == "__main__":
-    # Allow use on local network, may add flag to either run locally or on network
-    app.launch(
-        favicon_path='./imgs/favicon.png',
-        share=False,
-        server_name="0.0.0.0",
-        server_port=7860
-    )
+    while True:
+        css, saved_color, theme = get_setup_vars()
+        app = setup_layout(css, saved_color, theme)
+        app.launch(
+            favicon_path="./customization/favicon.png",
+            share=False,
+            server_name="0.0.0.0",
+            prevent_thread_lock=True
+        )
+
+        while not need_restart:
+            sleep(0.5)
+
+        need_restart = False
+        app.close()
