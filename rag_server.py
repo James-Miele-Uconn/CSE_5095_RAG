@@ -1,5 +1,5 @@
 from RAG import *
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify # type: ignore
 
 app = Flask(__name__)
 
@@ -69,8 +69,8 @@ def setup():
     return jsonify({"status": "ok"})
 
 
-@app.route("/", methods=["POST"])
-def main():
+@app.route("/response", methods=["POST"])
+def response():
     """Get response from RAG system to given query."""
     global vars, db, model
 
@@ -79,10 +79,17 @@ def main():
     model_choice = vars["model_choice"]
 
     # Get variables from frontend
-    query = request.form["query"]
+    try:
+        user_query = request.form["user_query"]
+    except:
+        user_query = None
+    try:
+        user_history = request.form["user_history"]
+    except:
+        user_history = None
 
     # Get response from RAG system
-    response = answer_query(vars, query, db, model)
+    response = get_response(vars, db, model, user_query=user_query, user_history=user_history)
 
     # Format response
     if not isinstance(response, str):

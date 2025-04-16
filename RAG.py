@@ -359,43 +359,74 @@ def load_models_and_db(vars):
     return (db, model)
 
 
-def answer_query(vars, query, db, model):
-    """Given a query, create a prompt and receive a response.
+def get_response(vars, db, model, user_query=None, user_history=None):
+    """Given input and some desired response type, create a prompt and receive a response.
 
     Args:
       vars: Dictionary containing setup variables.
-      query: The query to answer.
       db: The colleciton of documents to use for RAG (assumes ChromaDB).
       model: Chat model to use.
+      user_query: The query to give to the chat model. Defaults to None.
+      user_history: The history to give to the chat model. Defaults to None.
     
     Returns:
-      response received from the LLM model used
+      Response received from the LLM model used
     """
     # Get needed variables
     args = vars["args"]
     model_choice = vars["model_choice"]
     models_dict = vars["models_dict"]
 
-    # Set up context
-    cur_chunks = db.similarity_search_with_score(query, k=args.num_docs)
-    context_text = "\n\n".join([chunk.page_content for chunk, _score in cur_chunks])
+    if (user_query is not None) and (user_history is not None):
+        # Set up context
+        cur_chunks = db.similarity_search_with_score(user_query, k=args.num_docs)
+        context_text = "\n\n".join([chunk.page_content for chunk, _score in cur_chunks])
 
-    # Set up prompt
-    prompt_template = """
-    Answer the question based only on the following context:
-    {context}
-    Answer the question based on the above context: {question}.
-    Add a new line after every sentence.
-    Do not mention any information which is not contained within the context.
-    """
+        # Set up prompt
+        prompt_template = """
+        The following is a summary of the chat history so far:
+        {history}
+        Using the information above and the following context information, answer the question:
+        {context}
+        Answer the question based on the above information: {question}
+        Do not mention anything that is not contained in either the context information or the chat history.
+        """
 
-    # Load context and query into prompt
-    prompt_template = ChatPromptTemplate.from_template(prompt_template)
-    prompt = prompt_template.format(context=context_text, question=query)
+        # Load history, context, and query into prompt
+        prompt_template = ChatPromptTemplate.from_template(prompt_template)
+        prompt = prompt_template.format(history=user_history, context=context_text, question=user_query)
+    elif user_query is not None:
+        # Set up context
+        cur_chunks = db.similarity_search_with_score(user_query, k=args.num_docs)
+        context_text = "\n\n".join([chunk.page_content for chunk, _score in cur_chunks])
+
+        # Set up prompt
+        prompt_template = """
+        Answer the question based only on the following context:
+        {context}
+        Answer the question based on the above context: {question}
+        Do not mention any information which is not contained within the context.
+        """
+
+        # Load context and query into prompt
+        prompt_template = ChatPromptTemplate.from_template(prompt_template)
+        prompt = prompt_template.format(context=context_text, question=user_query)
+    elif user_history is not None:
+        # Set up prompt
+        prompt_template = """
+        Create a summary of the following chat history between a chatbot and a user:
+        {history}
+        """
+
+        # Load history into prompt
+        prompt_template = ChatPromptTemplate.from_template(prompt_template)
+        prompt = prompt_template.format(history=user_history)
+    else:
+        return "This action requires either a query or a chat history."
 
     # Get answer from LLM
     if (model_choice == "openai"):
-        response = model.invoke(query)
+        response = model.invoke(prompt)
     else:
         if (model_choice in models_dict["local"]):
             response = model.invoke(prompt)
@@ -438,7 +469,7 @@ def query_loop(vars, db, model):
             print("Please enter a query.")
             continue
 
-        response = answer_query(vars, query, db, model)
+        response = get_response(vars, db, model, user_query=query)
 
         # Create output for question and response
         output = "\n"
