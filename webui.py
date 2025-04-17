@@ -1,9 +1,11 @@
-from time import sleep
+from time import sleep, strftime, gmtime
 from sys import exit
 import gradio as gr # type: ignore
 import requests
 
+# Global values for state tracking
 need_restart = False
+just_uploaded = False
 
 # Options lists for each type of embedding model
 embeddings_dict = {
@@ -19,24 +21,55 @@ models_dict = {
     "online": ["openai"]
 }
 
+
+# Save history to local file
+def history_to_local(history):
+    cur_time = strftime("%Y-%m-%d-%H-%M-%S", gmtime())
+    fname = f"ChatHistory_{cur_time}"
+    with open(f"./output_files/{fname}.txt", "w") as outf:
+        outf.write(str(history))
+
+
+# Load local file to history
+def local_to_history(history_file):
+    global just_uploaded
+
+    history = []
+    try:
+        with open(history_file, "r") as inf:
+            history = inf.readlines()
+            if history:
+                history = eval(history[0])
+        just_uploaded = True
+    except:
+        pass
+
+    return [gr.Chatbot(type="messages", value=history), gr.Chatbot(type="messages", value=history)]
+
+
+# Update global variable checking for reload
 def update_reload():
     global need_restart
     need_restart = True
 
+
 # Update theme color
 def update_theme_color(cur_color):
-    with open("./customization/theme_color.txt", "w") as outf:
+    with open("./customization/theme_color.txt", "w", encoding="utf-8") as outf:
         outf.write(cur_color)
+
 
 # Update embedding options based on currently chosen type
 def update_embedding_opts(embedding_type):
     new_opts = embeddings_dict[embedding_type.lower()]
     return gr.Dropdown(new_opts, value=new_opts[0])
 
+
 # Update model options based on currently chosen type
 def update_chat_opts(model_type):
     new_opts = models_dict[model_type.lower()]
     return gr.Dropdown(new_opts, value=new_opts[0])
+
 
 # Show or hide chunk options
 def show_chunk_opts(rebuild_val):
@@ -46,11 +79,14 @@ def show_chunk_opts(rebuild_val):
 
     return [new_size, new_overlap, new_reset]
 
+
 # Reset chunk options to default values
 def chunk_opt_defaults():
      return [gr.Number(value=500), gr.Number(value=50)]
 
-def run_rag(message, history, use_history, embedding_choice, model_choice, num_docs, chunk_size, chunk_overlap, refresh_db):
+
+# Main chat function
+def run_rag(message, history, use_history, embedding_choice, model_choice, num_docs, chunk_size, chunk_overlap, refresh_db, uploaded_history):
     """Ensure the RAG system uses the desired setup, then request an answer from the system.
 
     Args:
@@ -63,10 +99,17 @@ def run_rag(message, history, use_history, embedding_choice, model_choice, num_d
       chunk_size: Size of chunks to use for database chunks.
       chunk_overlap: Amount of overlap to use for database chunks.
       refresh_db: Whether the database should be forcibly refreshed.
+      uploaded_history: Uploaded history to add 
     
     Returns:
       Formatted string response to the given query.
     """
+    global just_uploaded
+    if just_uploaded:
+        for idx in range(len(uploaded_history)):
+            history.insert(idx, uploaded_history[idx])
+        just_uploaded = False
+
     # Send info for RAG system setup
     setup_info = {
         "embedding_choice": embedding_choice,
@@ -99,23 +142,37 @@ def run_rag(message, history, use_history, embedding_choice, model_choice, num_d
 
     return response
 
+
+# Get customization options, to allow storing/reloading UI theme
 def get_setup_vars():
+    """Create variables to pass to UI Block object.
+
+    Returns:
+      CSS, color option, and theme object to give to UI Block object.
+    """
+    # Add custom css
     css = """
     footer {visibility: hidden}
     """
 
     # Get currently set theme color
     saved_color = "rose"
-    with open("./customization/theme_color.txt", "r") as inf:
-        saved_color = inf.readline().strip()
+    try:
+        with open("./customization/theme_color.txt", "r") as inf:
+            saved_color = inf.readline().strip()
+    except:
+        pass
 
     # Specify theme to use
     theme =  gr.themes.Default(
         primary_hue=saved_color,
         secondary_hue=saved_color
     ).set(
-        color_accent_soft_dark='*primary_800',
+        color_accent_soft='*primary_700',
+        color_accent_soft_dark='*primary_700',
+        border_color_primary='*primary_800',
         border_color_primary_dark='*primary_800',
+        border_color_accent='*primary_950',
         border_color_accent_dark='*primary_950'
     )
 
@@ -124,6 +181,16 @@ def get_setup_vars():
 
 # Layout for the UI
 def setup_layout(css, saved_color, theme):
+    """Create Block object to be used for UI.
+
+    Args:
+      css: String with custom CSS.
+      saved_color: String naming the saved color.
+      theme: Customized Default theme.
+    
+    Returns:
+      The Block object to be used for the UI.
+    """
     with gr.Blocks(title="RAG System", theme=theme, css=css) as app:
         with gr.Row():
             # Settings
@@ -174,7 +241,6 @@ def setup_layout(css, saved_color, theme):
                         value=False,
                         label="Force Rebuild Database"
                     )
-
                     with gr.Row():
                         with gr.Row():
                             chunk_size = gr.Number(
@@ -200,35 +266,72 @@ def setup_layout(css, saved_color, theme):
                                 visible=False
                             )
 
-            # Chat interface
-            # Chatbox and Textbox specified to allow customization
+            # Main interface options
             with gr.Column(scale=2):
-                main_chat = gr.ChatInterface(
-                    run_rag,
-                    type="messages",
-                    chatbot=gr.Chatbot(
+
+                # Chat interface
+                # Chatbox and Textbox specified to allow customization
+                with gr.Tab(label="RAG Chat"):
+                    with gr.Row():
+                        history_file = gr.File(
+                            label="Chat History File",
+                            height=65
+                        )
+                        upload_history = gr.Button(
+                            value="Upload History to Chat"
+                        )
+                        save_history = gr.Button(
+                            value="Save Chat History",
+                            min_width=0
+                        )
+                        view_history = gr.Chatbot(
+                            type="messages",
+                            visible=False
+                        )
+                    main_chat = gr.ChatInterface(
+                        run_rag,
+                        type="messages",
+                        chatbot=gr.Chatbot(
+                            type="messages",
+                            show_label=False,
+                            height=550,
+                            avatar_images=(None, None),
+                            placeholder="# Welcome to the experimental RAG system!"
+                        ),
+                        textbox=gr.Textbox(
+                            type='text',
+                            placeholder='Enter a query...',
+                            show_label=False
+                        ),
+                        additional_inputs=[
+                            use_history,
+                            embedding_choice,
+                            model_choice,
+                            num_docs,
+                            chunk_size,
+                            chunk_overlap,
+                            refresh_db,
+                            view_history
+                        ]
+                    )
+
+                """
+                # Upload chat history interface
+                with gr.Tab(label="Upload History"):
+                    history_file = gr.File(
+                        label="Chat History File"
+                    )
+                    upload_history = gr.Button(
+                        value="Upload History to RAG Chat"
+                    )
+                    view_history = gr.Chatbot(
                         type="messages",
                         show_label=False,
-                        height=550,
                         avatar_images=(None, None),
-                        value=[{"role": "assistant", "content": "Welcome to the experimental RAG system! How can I help?"}]
-                    ),
-                    textbox=gr.Textbox(
-                        type='text',
-                        placeholder='Enter a query...',
-                        show_label=False
-                    ),
-                    additional_inputs=[
-                        use_history,
-                        embedding_choice,
-                        model_choice,
-                        num_docs,
-                        chunk_size,
-                        chunk_overlap,
-                        refresh_db
-                    ],
-                )
-        
+                        placeholder="History to be used will show up here."
+                    )
+                """
+
         # Customization options
         with gr.Sidebar(width=200, open=False, position="right"):
             theme_color = gr.Dropdown(
@@ -239,22 +342,31 @@ def setup_layout(css, saved_color, theme):
                 interactive=True
             )
             reload_app = gr.Button(
-                value="Reload UI"
+                value="Reload UI\n(Requires refreshing tab)",
+                variant="stop"
             )
 
-        # Allow updating the embedding/chat model options based on the relevant type currently selected
+
+        # Save chat history to file
+        save_history.click(history_to_local, inputs=[main_chat.chatbot])
+
+        # Upload chat history file to chatbot
+        upload_history.click(local_to_history, inputs=[history_file], outputs=[view_history, main_chat.chatbot])
+
+        # Update the embedding/chat models options based on the relevant types currently selected
         embedding_type.change(update_embedding_opts, inputs=[embedding_type], outputs=[embedding_choice])
         model_type.change(update_chat_opts, inputs=[model_type], outputs=model_choice)
 
-        # Allow showing/hiding database options based on checkbox
+        # Show/hide database options based on checkbox
         refresh_db.change(show_chunk_opts, inputs=[refresh_db], outputs=[chunk_size, chunk_overlap, reset_chunk_opts])
 
-        # Allow resetting chunk options to default values
+        # Reset chunk options to default values
         reset_chunk_opts.click(chunk_opt_defaults, outputs=[chunk_size, chunk_overlap])
 
         # Save color on theme color change
         theme_color.change(update_theme_color, inputs=[theme_color])
 
+        # Restart UI, still requires browser tab to be refreshed
         reload_app.click(update_reload)
 
     return app
@@ -263,6 +375,7 @@ def setup_layout(css, saved_color, theme):
 
 if __name__ == "__main__":
     while True:
+        # Launch UI with customization settings
         css, saved_color, theme = get_setup_vars()
         app = setup_layout(css, saved_color, theme)
         app.launch(
@@ -272,8 +385,10 @@ if __name__ == "__main__":
             prevent_thread_lock=True
         )
 
+        # Loop until restart requested
         while not need_restart:
             sleep(0.5)
 
+        # Handle restart
         need_restart = False
         app.close()
