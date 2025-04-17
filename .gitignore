@@ -28,3 +28,4 @@ builder.py
 
 # Exclude customization file
 customization/theme_color.txt
+customization/chat_layout.txt

@@ -22,9 +22,10 @@ models_dict = {
 
 
 # Save history to local file
-def history_to_local(history):
-    cur_time = strftime("%Y-%m-%d-%H-%M-%S", gmtime())
-    fname = f"ChatHistory_{cur_time}"
+def history_to_local(history, fname):
+    if not fname:
+        cur_time = strftime("%Y-%m-%d-%H-%M-%S", gmtime())
+        fname = f"ChatHistory_{cur_time}"
     with open(f"./output_files/{fname}.txt", "w", encoding="utf-8") as outf:
         outf.write(str(history))
 
@@ -56,6 +57,14 @@ def update_reload():
 def update_theme_color(cur_color):
     with open("./customization/theme_color.txt", "w", encoding="utf-8") as outf:
         outf.write(cur_color)
+
+
+# Update chat layout
+def update_chat_layout(cur_layout):
+    with open("./customization/chat_layout.txt", "w", encoding="utf-8") as outf:
+        outf.write(cur_layout)
+    
+    return gr.Chatbot(type="messages", layout=cur_layout)
 
 
 # Update embedding options based on currently chosen type
@@ -147,7 +156,7 @@ def get_setup_vars():
     """Create variables to pass to UI Block object.
 
     Returns:
-      CSS, color option, and theme object to give to UI Block object.
+      CSS, color option, theme object, and chat layout to give to UI Block object.
     """
     # Add custom css
     css = """
@@ -175,17 +184,25 @@ def get_setup_vars():
         border_color_accent_dark='*primary_950'
     )
 
-    return (css, saved_color, theme)
+    cur_layout = "bubble"
+    try:
+        with open("./customization/chat_layout.txt", "r") as inf:
+            cur_layout = inf.readline().strip()
+    except:
+        pass
+
+    return (css, saved_color, theme, cur_layout)
 
 
 # Layout for the UI
-def setup_layout(css, saved_color, theme):
+def setup_layout(css, saved_color, theme, cur_layout):
     """Create Block object to be used for UI.
 
     Args:
       css: String with custom CSS.
       saved_color: String naming the saved color.
       theme: Customized Default theme.
+      cur_layout: String naming which layout to use for the chatbot.
     
     Returns:
       The Block object to be used for the UI.
@@ -270,13 +287,17 @@ def setup_layout(css, saved_color, theme):
                 # Tab containing chatbot and related options
                 with gr.Tab(label="RAG Chat"):
                     # Chat history options
-                    with gr.Row():
+                    with gr.Row(equal_height=True):
                         history_file = gr.File(
-                            label="Chat History File",
+                            show_label=False,
                             height=65
                         )
                         upload_history = gr.Button(
                             value="Upload History to Chat"
+                        )
+                        save_name = gr.Textbox(
+                            placeholder="Enter the filename you would like to use",
+                            label="Chat History File Name"
                         )
                         save_history = gr.Button(
                             value="Save Chat History",
@@ -297,7 +318,8 @@ def setup_layout(css, saved_color, theme):
                             show_label=False,
                             height=550,
                             avatar_images=(None, None),
-                            placeholder="# Welcome to the experimental RAG system!"
+                            placeholder="# Welcome to the experimental RAG system!",
+                            layout=cur_layout
                         ),
                         textbox=gr.Textbox(
                             type='text',
@@ -318,20 +340,30 @@ def setup_layout(css, saved_color, theme):
 
         # Customization options
         with gr.Sidebar(width=200, open=False, position="right"):
-            theme_color = gr.Dropdown(
-                ["slate", "gray", "zinc", "neutral", "stone", "red", "orange", "amber", "yellow", "lime", "green", "emerald", "teal", "cyan", "sky", "blue", "indigo", "violet", "purple", "fuchsia", "pink", "rose"],
-                value=saved_color,
-                label="Theme Color",
-                info="Change requires restart",
-                interactive=True
-            )
-            reload_app = gr.Button(
-                value="Reload UI\n(Requires refreshing tab)",
-                variant="stop"
-            )
+            # Settings that don't need a restart
+            with gr.Column():
+                chat_layout = gr.Radio(
+                    ["panel", "bubble"],
+                    value=cur_layout,
+                    label="Chat Style"
+                )
+
+            # Settings that do need a restart            
+            with gr.Group():
+                theme_color = gr.Dropdown(
+                    ["slate", "gray", "zinc", "neutral", "stone", "red", "orange", "amber", "yellow", "lime", "green", "emerald", "teal", "cyan", "sky", "blue", "indigo", "violet", "purple", "fuchsia", "pink", "rose"],
+                    value=saved_color,
+                    label="Theme Color",
+                    info="Change requires restart",
+                    interactive=True
+                )
+                reload_app = gr.Button(
+                    value="Reload UI\n(Requires refreshing tab)",
+                    variant="stop"
+                )
 
         # Save chat history to file
-        save_history.click(history_to_local, inputs=[main_chat.chatbot])
+        save_history.click(history_to_local, inputs=[main_chat.chatbot, save_name])
 
         # Upload chat history file to chatbot
         upload_history.click(local_to_history, inputs=[history_file], outputs=[view_history, main_chat.chatbot])
@@ -349,6 +381,9 @@ def setup_layout(css, saved_color, theme):
         # Save color on theme color change
         theme_color.change(update_theme_color, inputs=[theme_color])
 
+        # Save chat layout on chat style change
+        chat_layout.change(update_chat_layout, inputs=[chat_layout], outputs=[main_chat.chatbot])
+
         # Restart UI, still requires browser tab to be refreshed
         reload_app.click(update_reload)
 
@@ -359,8 +394,8 @@ def setup_layout(css, saved_color, theme):
 if __name__ == "__main__":
     while True:
         # Launch UI with customization settings
-        css, saved_color, theme = get_setup_vars()
-        app = setup_layout(css, saved_color, theme)
+        css, saved_color, theme, cur_layout = get_setup_vars()
+        app = setup_layout(css, saved_color, theme, cur_layout)
         app.launch(
             favicon_path="./customization/favicon.png",
             share=False,
