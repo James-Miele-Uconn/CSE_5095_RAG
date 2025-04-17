@@ -25,7 +25,7 @@ models_dict = {
 def history_to_local(history):
     cur_time = strftime("%Y-%m-%d-%H-%M-%S", gmtime())
     fname = f"ChatHistory_{cur_time}"
-    with open(f"./output_files/{fname}.txt", "w") as outf:
+    with open(f"./output_files/{fname}.txt", "w", encoding="utf-8") as outf:
         outf.write(str(history))
 
 
