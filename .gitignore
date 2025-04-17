@@ -25,3 +25,6 @@ __pycache__/
 
 # Exclude builder file
 builder.py
+
+# Exclude customization file
+customization/theme_color.txt
