@@ -1,5 +1,4 @@
 from time import sleep, strftime, gmtime
-from sys import exit
 import gradio as gr # type: ignore
 import requests
 
@@ -268,10 +267,9 @@ def setup_layout(css, saved_color, theme):
 
             # Main interface options
             with gr.Column(scale=2):
-
-                # Chat interface
-                # Chatbox and Textbox specified to allow customization
+                # Tab containing chatbot and related options
                 with gr.Tab(label="RAG Chat"):
+                    # Chat history options
                     with gr.Row():
                         history_file = gr.File(
                             label="Chat History File",
@@ -288,6 +286,9 @@ def setup_layout(css, saved_color, theme):
                             type="messages",
                             visible=False
                         )
+
+                    # Chat interface
+                    # Chatbox and Textbox specified to allow customization
                     main_chat = gr.ChatInterface(
                         run_rag,
                         type="messages",
@@ -315,23 +316,6 @@ def setup_layout(css, saved_color, theme):
                         ]
                     )
 
-                """
-                # Upload chat history interface
-                with gr.Tab(label="Upload History"):
-                    history_file = gr.File(
-                        label="Chat History File"
-                    )
-                    upload_history = gr.Button(
-                        value="Upload History to RAG Chat"
-                    )
-                    view_history = gr.Chatbot(
-                        type="messages",
-                        show_label=False,
-                        avatar_images=(None, None),
-                        placeholder="History to be used will show up here."
-                    )
-                """
-
         # Customization options
         with gr.Sidebar(width=200, open=False, position="right"):
             theme_color = gr.Dropdown(
@@ -345,7 +329,6 @@ def setup_layout(css, saved_color, theme):
                 value="Reload UI\n(Requires refreshing tab)",
                 variant="stop"
             )
-
 
         # Save chat history to file
         save_history.click(history_to_local, inputs=[main_chat.chatbot])
