@@ -1,16 +1,16 @@
 """Import statements."""
 
-from huggingface_hub import notebook_login
-from langchain_community.document_loaders import TextLoader, PyPDFDirectoryLoader, DirectoryLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_chroma import Chroma
-from langchain_ollama import OllamaEmbeddings
-from langchain_ollama import ChatOllama
-from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline, ChatHuggingFace
+from huggingface_hub import notebook_login # type: ignore
+from langchain_community.document_loaders import TextLoader, CSVLoader, PyPDFDirectoryLoader, DirectoryLoader # type: ignore
+from langchain.text_splitter import RecursiveCharacterTextSplitter # type: ignore
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI # type: ignore
+from langchain.prompts import ChatPromptTemplate # type: ignore
+from langchain_core.output_parsers import StrOutputParser # type: ignore
+from langchain_core.messages import HumanMessage, SystemMessage # type: ignore
+from langchain_chroma import Chroma # type: ignore
+from langchain_ollama import OllamaEmbeddings # type: ignore
+from langchain_ollama import ChatOllama # type: ignore
+from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline, ChatHuggingFace # type: ignore
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from time import time, gmtime, strftime
 from sys import exit
@@ -33,18 +33,18 @@ def parse_arguments():
 
     return args
 
-def get_vars(embedding_choice=None, model_choice=None, num_docs=None):
+def get_vars(embedding_choice=None, model_choice=None, num_docs=None, upload=False):
     """Define setup variables.
 
     Args:
       embedding_choice: Which embedding model to use. Defaults to None, to be overwritten.
       model_choice: Which chat model to use. Defaults to None, to be overwritten.
       num_docs: Number of chunks to use for answers. Defaults to None, as a flag for argparse.
+      upload: Whether the current action is uploading files. Defaults to False.
 
     Returns:
       Dicitonary containing all variables to be used by other functions.
     """
-
     # Get arguments from command line
     args = parse_arguments()
 
@@ -60,33 +60,38 @@ def get_vars(embedding_choice=None, model_choice=None, num_docs=None):
     roots["CONTEXT_ROOT"] = os.path.join(roots["PROJECT_ROOT"], "context_files\\")
     roots["PDF_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "pdf_files\\")
     roots["CSV_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "csv_files\\")
+    roots["TXT_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "txt_files\\")
     roots["CHROMA_ROOT"] = os.path.join(roots["PROJECT_ROOT"], "chroma_db_files\\")
     roots["MODIFIED_ROOT"] = os.path.join(roots["CHROMA_ROOT"], "(0)modified-times\\")
-    roots["OUTPUT_ROOT"] = os.path.join(roots["PROJECT_ROOT"], "output_files\\")
     roots["API_ROOT"] = os.path.join(roots["PROJECT_ROOT"], "api_keys\\")
 
     # Create structural directories, if they don't exist
-    ordered_roots = ["API_ROOT", "CHROMA_ROOT", "MODIFIED_ROOT", "CONTEXT_ROOT", "PDF_ROOT", "CSV_ROOT", "OUTPUT_ROOT"]
+    ordered_roots = [
+        "API_ROOT",
+        "CHROMA_ROOT",
+        "MODIFIED_ROOT",
+        "CONTEXT_ROOT",
+        "PDF_ROOT",
+        "CSV_ROOT",
+        "TXT_ROOT"
+    ]
     for root in ordered_roots:
         if not os.path.exists(roots[root]):
             try:
                 os.mkdir(roots[root])
-            except Exception as e:
-                print(f"Error making {root}:\n{e}")
-                exit(1)
+            except:
+                raise Exception("Could not create structural directories.")
 
-    # Determine if context directories are empty
-    context_roots = ["PDF_ROOT", "CSV_ROOT"]
-    need_context = False
-    for root in context_roots:
-        if not os.listdir(roots[root]):
-            need_context = True
+    # Exit early if uploading
+    if upload:
+        return roots
 
-    # Check if context documents need to be added
+    # Determine if all context directories are empty
+    context_roots = ["PDF_ROOT", "CSV_ROOT", "TXT_ROOT"]
+    has_context = [bool(os.listdir(roots[root])) for root in context_roots]
+    need_context = not any(has_context)
     if need_context:
-        print("\nYou have not supplied any documents to be used as context information.")
-        print("Please do so before using this system.")
-        exit(1)
+        raise Exception("No context files have been provided, at least one is needed.")
 
     # Embedding to use, determines if running online
     embeddings_dict = {
@@ -123,9 +128,7 @@ def get_vars(embedding_choice=None, model_choice=None, num_docs=None):
         # Check if a csv file containing api keys exists
         cur_root = roots["API_ROOT"]
         if not os.listdir(cur_root):
-            print("\nYou have chosen to use an online model but have not provided any api keys.")
-            print("Please do so before using this system.")
-            exit(1)
+            raise Exception("No file containing API keys was provided.")
 
         with open(os.path.join(cur_root, os.listdir(cur_root)[0])) as inf:
             for line in inf:
@@ -182,14 +185,14 @@ def load_embedding(vars):
     return embedding
 
 
-def set_chroma_load(modified_times_loc, chroma_loc, cur_embedding, other_locs=list()):
+def set_chroma_load(modified_times_loc, chroma_loc, cur_embedding, other_locs):
     """Determine if Chroma should load from directory or start a new run.
 
     Args:
       modified_times_loc: Location of files saving last modified times for each embedding model.
       chroma_loc: Location of persistent directory for Chroma.
       cur_embedding: Current choice of embedding model, to check if a directory for said model exists.
-      other_locs: List of locations with context docs to be checked for changes. Defaults to empty list.
+      other_locs: List of locations with context docs to be checked for changes.
     
     Returns:
       Boolean representing if Chroma should use saved files or create new files.
@@ -222,36 +225,38 @@ def set_chroma_load(modified_times_loc, chroma_loc, cur_embedding, other_locs=li
     return should_load
 
 
-def load_and_chunk(splitter, pdf_loc=None, csv_loc=None):
+def load_and_chunk(splitter, locs):
     """Load and chunk documents from specified locations.
 
     Args:
       splitter: The text splitter to use.
-      pdf_loc: Path to directory containing pdf file(s).
-      csv_loc: Path to directory containing csv file(s).
+      locs: Dicitonary of paths to context file directories.
     
     Returns:
       Dictionary of chunked documents
     """
     # Load pdf documents
     pdf_chunks = None
-    if pdf_loc:
-      pdf_loader = PyPDFDirectoryLoader(pdf_loc)
+    if os.listdir(locs['pdf_loc']):
+      pdf_loader = PyPDFDirectoryLoader(locs['pdf_loc'])
       pdf_pages = pdf_loader.load()
       pdf_chunks = splitter.split_documents(pdf_pages)
 
     # Load csv documents
     csv_chunks = None
-    if csv_loc:
-      csv_loader = DirectoryLoader(csv_loc)
+    if os.listdir(locs['csv_loc']):
+      csv_loader = DirectoryLoader(locs['csv_loc'], loader_cls=CSVLoader)
       csv_pages = csv_loader.load()
       csv_chunks = splitter.split_documents(csv_pages)
 
-    output = {'pdf': None, 'csv': None, 'txt': None}
-    if pdf_chunks:
-      output['pdf'] = pdf_chunks
-    if csv_chunks:
-      output['csv'] = csv_chunks
+    # Load txt documents
+    txt_chunks = None
+    if os.listdir(locs['txt_loc']):
+        txt_loader = DirectoryLoader(locs['txt_loc'], loader_cls=TextLoader)
+        txt_pages = txt_loader.load()
+        txt_chunks = splitter.split_documents(txt_pages)
+
+    output = {'pdf': pdf_chunks, 'csv': csv_chunks, 'txt': txt_chunks}
 
     return output
 
@@ -283,11 +288,15 @@ def load_database(vars, embedding):
             exit(1)
 
     # Check if database should be loaded from saved files
-    context_locs = [roots["PDF_ROOT"], roots["CSV_ROOT"]]
+    context_locs = {
+        'pdf_loc': roots["PDF_ROOT"],
+        'csv_loc': roots["CSV_ROOT"],
+        'txt_loc': roots["TXT_ROOT"]
+    }
     if args.refresh_db:
         chroma_load = False
     else:
-        chroma_load = set_chroma_load(roots["MODIFIED_ROOT"], roots["CHROMA_ROOT"], embedding_choice, other_locs=context_locs)
+        chroma_load = set_chroma_load(roots["MODIFIED_ROOT"], roots["CHROMA_ROOT"], embedding_choice, context_locs.values())
 
     # Load or build database
     db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db)
@@ -302,7 +311,7 @@ def load_database(vars, embedding):
         
         # Give context information to database
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-        chunks = load_and_chunk(text_splitter, pdf_loc=roots["PDF_ROOT"], csv_loc=roots["CSV_ROOT"])
+        chunks = load_and_chunk(text_splitter, context_locs)
         for key in chunks.keys():
             if chunks[key] is not None:
                 db.add_documents(documents=chunks[key])

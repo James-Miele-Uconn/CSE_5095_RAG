@@ -1,5 +1,7 @@
 from RAG import *
-from flask import Flask, request, jsonify # type: ignore
+from flask import Flask, request, jsonify, send_from_directory # type: ignore
+from werkzeug.utils import secure_filename # type: ignore
+import os
 
 app = Flask(__name__)
 
@@ -8,6 +10,87 @@ vars = None
 embedding = None
 db = None
 model = None
+
+
+@app.route("/context", methods=["POST"])
+def context():
+    global vars
+
+    if vars is None:
+        roots = get_vars(upload=True)
+    else:
+        roots = vars["roots"]
+
+    output = []
+    for file in os.listdir(roots["PDF_ROOT"]):
+        output.append(file)
+    for file in os.listdir(roots["CSV_ROOT"]):
+        output.append(file)
+    for file in os.listdir(roots["TXT_ROOT"]):
+        output.append(file)
+    
+    return jsonify({'files': output})
+
+
+@app.route("/download/<name>")
+def download_file(name):
+    global vars
+
+    if vars is None:
+        roots = get_vars(upload=True)
+    else:
+        roots = vars["roots"]
+
+    ext = name.split('.')[-1].strip().upper()
+    root_dir = roots[f"{ext}_ROOT"]
+
+    return send_from_directory(root_dir, name)
+
+
+@app.route("/delete/<name>", methods=["POST"])
+def delete_file(name):
+    global vars
+
+    if vars is None:
+        roots = get_vars(upload=True)
+    else:
+        roots = vars["roots"]
+    
+    ext = name.split('.')[-1].strip().upper()
+    root_dir = roots[f"{ext}_ROOT"]
+
+    try:
+        os.remove(os.path.join(root_dir, name))
+        return jsonify({'status': 'ok'})
+    except:
+        return jsonify({'status': 'error'})
+
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    global vars
+
+    # Get needed variables
+    if vars is None:
+        roots = get_vars(upload=True)
+    else:
+        roots = vars["roots"]
+
+    # Get variables from frontend
+    file = request.files['file']
+
+    # Determine directory based on file type
+    filename = secure_filename(file.filename)
+    ext = filename.split('.')[-1].strip().upper()
+    root_dir = roots[f"{ext}_ROOT"]
+
+    # Save file
+    try:
+        file.save(os.path.join(root_dir, filename))
+        return jsonify({'status': 'ok'})
+    except:
+        return jsonify({'status': 'error', 'file': filename})
+
 
 @app.route("/setup", methods=["POST"])
 def setup():
@@ -35,7 +118,11 @@ def setup():
 
     # Check if initial setup should happen
     if vars is None:
-        vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
+        try:
+            vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
+        except Exception as e:
+            return jsonify({"status": "error", "issue": e.args[0]})
+
         vars["chunk_size"] = chunk_size
         vars["chunk_overlap"] = chunk_overlap
         vars["args"].refresh_db = refresh_db
@@ -48,7 +135,11 @@ def setup():
         for var in cur_vars.keys():
             if vars[var] != cur_vars[var]:
                 updates[var] = True
-        vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
+        
+        try:
+            vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
+        except Exception as e:
+            return jsonify({"status": "error", "issue": e.args[0]})
 
         # Update embedding model, if needed
         if updates["embedding_choice"]:

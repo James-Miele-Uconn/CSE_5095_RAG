@@ -1,27 +1,18 @@
-# Exclude ChromaDB files and last modified time files, but not the structural folders
-chroma_db_files/(0)modified-times/*
-chroma_db_files/*
-!chroma_db_files/
-!chroma_db_files/(0)modified-times/
+# Exclude ChromaDB files
+rag/chroma_db_files/
 
 # Exclude all context files, and folder for old context files, but not the structural folders
-context_files/alt/
-context_files/csv_files/*
-context_files/pdf_files/*
-!context_files/
-!context_files/csv_files/
-!context_files/pdf_files/
-
-# Exclude all output files, but not the output file folder
-output_files/*
-!output_files/
+rag/context_files/alt/
+rag/context_files/csv_files/
+rag/context_files/pdf_files/
+rag/context_files/txt_files/
 
 # Exclude all api keys
-api_keys/*
+rag/api_keys/*
 
 # Exclude any files created by running code
-.ipynb_checkpoints/
 __pycache__/
+rag/__pycache__/
 
 # Exclude builder file
 builder.py
@@ -29,3 +20,7 @@ builder.py
 # Exclude customization file
 customization/theme_color.txt
 customization/chat_layout.txt
+
+# Exclude webui folders
+histories/
+saved_context/
