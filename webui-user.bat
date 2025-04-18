@@ -1,3 +1,3 @@
 @echo off
-start python rag_server.py
-start python webui.py
+start cmd /k python rag/rag_server.py
+start cmd /k python webui.py

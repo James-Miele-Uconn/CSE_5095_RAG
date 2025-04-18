@@ -439,7 +439,7 @@ def setup_layout(css, saved_color, theme, cur_layout):
                 )
             
             # Tab containing context file information
-            with gr.Tab(label="Upload Context Files"):
+            with gr.Tab(label="Upload Context Files") as context_tab:
                 with gr.Row():
                     # Upload context files
                     with gr.Column():
@@ -465,8 +465,7 @@ def setup_layout(css, saved_color, theme, cur_layout):
                             )
 
                         view_context_files = gr.Files(
-                            show_label=False,
-                            value=show_context_files
+                            show_label=False
                         )
 
         # Customization options
@@ -494,6 +493,7 @@ def setup_layout(css, saved_color, theme, cur_layout):
                 )
 
         # Handle context files
+        context_tab.select(show_context_files, outputs=[view_context_files])
         upload_context.click(context_to_server, inputs=[context_files], outputs=[context_files, view_context_files])
         download_all_context.click(dl_all_server_context, inputs=[view_context_files])
         view_context_files.delete(delete_single_context)
