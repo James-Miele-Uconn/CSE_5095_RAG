@@ -185,46 +185,6 @@ def load_embedding(vars):
     return embedding
 
 
-def set_chroma_load(modified_times_loc, chroma_loc, cur_embedding, other_locs):
-    """Determine if Chroma should load from directory or start a new run.
-
-    Args:
-      modified_times_loc: Location of files saving last modified times for each embedding model.
-      chroma_loc: Location of persistent directory for Chroma.
-      cur_embedding: Current choice of embedding model, to check if a directory for said model exists.
-      other_locs: List of locations with context docs to be checked for changes.
-    
-    Returns:
-      Boolean representing if Chroma should use saved files or create new files.
-    """
-    # Get last modified times for each of the directories holding context information
-    context_times = [os.path.getmtime(folder) for folder in other_locs]
-
-    # Get last modified time for specific embedding model, making file and setting time to 0 if none exists
-    cur_embed_chroma_mod = None
-    cur_embed_chroma_mod_loc = os.path.join(modified_times_loc, f"{cur_embedding}.txt")
-    if not os.path.exists(cur_embed_chroma_mod_loc):
-        # Make file with "time" of 0 if no file exists for this embedding model
-        with open(cur_embed_chroma_mod_loc, "w") as outf:
-            outf.write("0")
-    with open(cur_embed_chroma_mod_loc, "r") as inf:
-        for line in inf:
-            cur_embed_chroma_mod = float(line.strip())
-            break
-
-    # Get booleans for determining if Chroma should load
-    chroma_dir_exists = os.path.exists(os.path.join(chroma_loc, f"{cur_embedding}\\"))
-    context_modified = any([mod > cur_embed_chroma_mod for mod in context_times])
-
-    # Determine if Chroma should load
-    if context_modified or not chroma_dir_exists:
-        should_load = False
-    else:
-        should_load = True
-    
-    return should_load
-
-
 def load_and_chunk(splitter, locs):
     """Load and chunk documents from specified locations.
 
@@ -274,33 +234,23 @@ def load_database(vars, embedding):
     # Get needed variables
     roots = vars["roots"]
     embedding_choice = vars["embedding_choice"]
-    args = vars["args"]
+    need_refresh = vars["args"].refresh_db
     chunk_size = vars["chunk_size"]
     chunk_overlap = vars["chunk_overlap"]
 
     # Create directory for database using current embedding model, if needed
     cur_embed_db = os.path.join(roots["CHROMA_ROOT"], f"{embedding_choice}")
     if not os.path.exists(cur_embed_db):
+        need_refresh = True
         try:
             os.mkdir(cur_embed_db)
         except Exception as e:
             print(f"Error:\n{e}")
             exit(1)
 
-    # Check if database should be loaded from saved files
-    context_locs = {
-        'pdf_loc': roots["PDF_ROOT"],
-        'csv_loc': roots["CSV_ROOT"],
-        'txt_loc': roots["TXT_ROOT"]
-    }
-    if args.refresh_db:
-        chroma_load = False
-    else:
-        chroma_load = set_chroma_load(roots["MODIFIED_ROOT"], roots["CHROMA_ROOT"], embedding_choice, context_locs.values())
-
     # Load or build database
     db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db)
-    if not chroma_load:
+    if need_refresh:
         # Remove old database info
         try:
             db._client.delete_collection(embedding_choice)
@@ -310,6 +260,11 @@ def load_database(vars, embedding):
             exit(1)
         
         # Give context information to database
+        context_locs = {
+            'pdf_loc': roots["PDF_ROOT"],
+            'csv_loc': roots["CSV_ROOT"],
+            'txt_loc': roots["TXT_ROOT"]
+        }
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         chunks = load_and_chunk(text_splitter, context_locs)
         for key in chunks.keys():

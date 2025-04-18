@@ -439,7 +439,7 @@ def setup_layout(css, saved_color, theme, cur_layout):
                 )
             
             # Tab containing context file information
-            with gr.Tab(label="Upload Context Files") as context_tab:
+            with gr.Tab(label="Manage Context Files") as context_tab:
                 with gr.Row():
                     # Upload context files
                     with gr.Column():
