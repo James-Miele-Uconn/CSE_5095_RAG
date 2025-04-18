@@ -16,11 +16,13 @@ model = None
 def context():
     global vars
 
+    # Get needed variables
     if vars is None:
         roots = get_vars(upload=True)
     else:
         roots = vars["roots"]
 
+    # add all files to output
     output = []
     for file in os.listdir(roots["PDF_ROOT"]):
         output.append(file)
@@ -36,11 +38,13 @@ def context():
 def download_file(name):
     global vars
 
+    # Get needed variables
     if vars is None:
         roots = get_vars(upload=True)
     else:
         roots = vars["roots"]
 
+    # Determine directory file is in
     ext = name.split('.')[-1].strip().upper()
     root_dir = roots[f"{ext}_ROOT"]
 
@@ -51,16 +55,23 @@ def download_file(name):
 def delete_file(name):
     global vars
 
+    # Get needed variables
     if vars is None:
         roots = get_vars(upload=True)
     else:
         roots = vars["roots"]
-    
+
+    # Determine directory file is in    
     ext = name.split('.')[-1].strip().upper()
     root_dir = roots[f"{ext}_ROOT"]
 
+    # Try deleting file
     try:
         os.remove(os.path.join(root_dir, name))
+
+        with open(os.path.join(roots["CONTEXT_ROOT"], "last_modified.txt"), "w") as outf:
+            outf.write(f"{time()}")
+
         return jsonify({'status': 'ok'})
     except:
         return jsonify({'status': 'error'})
@@ -84,9 +95,13 @@ def upload():
     ext = filename.split('.')[-1].strip().upper()
     root_dir = roots[f"{ext}_ROOT"]
 
-    # Save file
+    # Try saving file
     try:
         file.save(os.path.join(root_dir, filename))
+
+        with open(os.path.join(roots["CONTEXT_ROOT"], "last_modified.txt"), "w") as outf:
+            outf.write(f"{time()}")
+
         return jsonify({'status': 'ok'})
     except:
         return jsonify({'status': 'error', 'file': filename})
@@ -94,7 +109,6 @@ def upload():
 
 @app.route("/setup", methods=["POST"])
 def setup():
-    """Ensure RAG system setup uses desired settings."""
     global vars, embedding, db, model
 
     # Get variables from frontend
@@ -126,8 +140,14 @@ def setup():
         vars["chunk_size"] = chunk_size
         vars["chunk_overlap"] = chunk_overlap
         vars["args"].refresh_db = refresh_db
+    if embedding is None:
         embedding = load_embedding(vars)
-        db = load_database(vars, embedding)
+    if db is None:
+        try:
+            db = load_database(vars, embedding)
+        except Exception as e:
+            return jsonify({"status": "error", "issue": e.args[0]})
+    if model is None:
         model = load_model(vars)
     else:
         # Check which options need updating
@@ -144,14 +164,20 @@ def setup():
         # Update embedding model, if needed
         if updates["embedding_choice"]:
             embedding = load_embedding(vars)
-            db = load_database(vars, embedding)
+            try:
+                db = load_database(vars, embedding)
+            except Exception as e:
+                return jsonify({"status": "error", "issue": e.args[0]})
 
         # Update database, if needed
         if refresh_db:
             vars["chunk_size"] = chunk_size
             vars["chunk_overlap"] = chunk_overlap
             vars["args"].refresh_db = refresh_db
-            db = load_database(vars, embedding)
+            try:
+                db = load_database(vars, embedding)
+            except Exception as e:
+                return jsonify({"status": "error", "issue": e.args[0]})
 
         # Update chat model, if needed
         if updates["model_choice"]:
@@ -162,7 +188,6 @@ def setup():
 
 @app.route("/response", methods=["POST"])
 def response():
-    """Get response from RAG system to given query."""
     global vars, db, model
 
     # Get needed variables

@@ -6,6 +6,7 @@ rag/context_files/alt/
 rag/context_files/csv_files/
 rag/context_files/pdf_files/
 rag/context_files/txt_files/
+rag/context_files/last_modified.txt
 
 # Exclude all api keys
 rag/api_keys/*

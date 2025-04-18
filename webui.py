@@ -5,6 +5,8 @@ import requests, os
 
 # Hack to allow downloading files from localhost
 gr.processing_utils.PUBLIC_HOSTNAME_WHITELIST.append("127.0.0.1")
+theme_mode_js_light = """window.location.href = "localhost:7860/?__theme=light"""
+theme_mode_js_dark = """window.location.href = "localhost:7860/?__theme=dark"""
 
 # Global values for state tracking
 need_restart = False
@@ -310,163 +312,160 @@ def setup_layout(css, saved_color, theme, cur_layout):
     """
     with gr.Blocks(title="RAG System", theme=theme, css=css) as app:
         # Settings
-        with gr.Sidebar(width=500, open=False):
-            # Embedding model options
-            with gr.Column():
-                    embedding_type = gr.Radio(
-                        ["Ollama", "Local", "Online"],
-                        value="Ollama",
-                        label="Embedding Model Type"
+        with gr.Row():
+            with gr.Column(scale=1):
+                # Embedding model options
+                with gr.Column():
+                        embedding_type = gr.Radio(
+                            ["Ollama", "Local", "Online"],
+                            value="Ollama",
+                            label="Embedding Model Type"
+                        )
+                        embedding_choice = gr.Dropdown(
+                            embeddings_dict["ollama"],
+                            value=embeddings_dict["ollama"][0],
+                            label="Embedding Model"
+                        )
+
+                # Chat model options
+                with gr.Column():
+                        model_type = gr.Radio(
+                            ["Ollama", "Local", "Online"],
+                            value="Ollama",
+                            label="Chat Model Type"
+                        )
+                        model_choice = gr.Dropdown(
+                            models_dict["ollama"],
+                            value=models_dict["ollama"][0],
+                            label="Chat Model"
+                        )
+
+                # Various other common options
+                with gr.Column():
+                    num_docs = gr.Slider(
+                        1,
+                        10,
+                        value=5,
+                        step=1,
+                        label="Number of chunks to use when answering query"
                     )
-                    embedding_choice = gr.Dropdown(
-                        embeddings_dict["ollama"],
-                        value=embeddings_dict["ollama"][0],
-                        label="Embedding Model"
+                    use_history = gr.Checkbox(
+                        label="Add summary of chat history to query",
+                        value=False
                     )
 
-            # Chat model options
-            with gr.Column():
-                    model_type = gr.Radio(
-                        ["Ollama", "Local", "Online"],
-                        value="Ollama",
-                        label="Chat Model Type"
+                # Database options
+                with gr.Group():
+                    refresh_db = gr.Checkbox(
+                        value=False,
+                        label="Force Rebuild Database"
                     )
-                    model_choice = gr.Dropdown(
-                        models_dict["ollama"],
-                        value=models_dict["ollama"][0],
-                        label="Chat Model"
-                    )
-
-            # Various other common options
-            with gr.Column():
-                num_docs = gr.Slider(
-                    1,
-                    10,
-                    value=5,
-                    step=1,
-                    label="Number of chunks to use when answering query"
-                )
-                use_history = gr.Checkbox(
-                    label="Add summary of chat history to query",
-                    value=False
-                )
-
-            # Database options
-            with gr.Group():
-                refresh_db = gr.Checkbox(
-                    value=False,
-                    label="Force Rebuild Database"
-                )
-                with gr.Row():
                     with gr.Row():
                         chunk_size = gr.Number(
                             value=500,
                             label="Chunk Size",
                             info="Min value is 1.",
-                            scale=6,
                             visible=False
                         )
                         chunk_overlap = gr.Number(
                             value=50,
                             label="Chunk Overlap",
                             info="Min value is 0.",
-                            scale=6,
                             visible=False
                         )
-                        reset_chunk_opts = gr.Button(
-                            value="",
-                            icon="./customization/reset.png",
-                            variant="primary",
-                            scale=1,
-                            min_width=0,
-                            visible=False
-                        )
-
-        # Main interface options
-        with gr.Column(scale=2):
-            # Tab containing chatbot and related options
-            with gr.Tab(label="RAG Chat"):
-                # Chat history options
-                with gr.Row(equal_height=True):
-                    history_file = gr.File(
-                        show_label=False,
-                        height=65
-                    )
-                    upload_history = gr.Button(
-                        value="Upload History to Chat"
-                    )
-                    save_name = gr.Textbox(
-                        placeholder="Enter the filename you would like to use",
-                        label="Chat History File Name"
-                    )
-                    save_history = gr.Button(
-                        value="Save Chat History",
-                        min_width=0
-                    )
-                    view_history = gr.Chatbot(
-                        type="messages",
+                    reset_chunk_opts = gr.Button(
+                        value="",
+                        icon="./customization/reset.png",
+                        variant="primary",
+                        min_width=0,
                         visible=False
                     )
 
-                # Chat interface
-                # Chatbox and Textbox specified to allow customization
-                main_chat = gr.ChatInterface(
-                    run_rag,
-                    type="messages",
-                    chatbot=gr.Chatbot(
-                        type="messages",
-                        show_label=False,
-                        height=550,
-                        avatar_images=(None, None),
-                        placeholder="# Welcome to the experimental RAG system!",
-                        layout=cur_layout
-                    ),
-                    textbox=gr.Textbox(
-                        type='text',
-                        placeholder='Enter a query...',
-                        show_label=False
-                    ),
-                    additional_inputs=[
-                        use_history,
-                        embedding_choice,
-                        model_choice,
-                        num_docs,
-                        chunk_size,
-                        chunk_overlap,
-                        refresh_db,
-                        view_history
-                    ]
-                )
-            
-            # Tab containing context file information
-            with gr.Tab(label="Manage Context Files") as context_tab:
-                with gr.Row():
-                    # Upload context files
-                    with gr.Column():
-                        gr.Markdown(value="<center><h1>Upload Context Files</h1></center>")
-                        upload_context = gr.Button(
-                            value="Upload to RAG Server",
-                            variant="primary"
+            # Main interface options
+            with gr.Column(scale=4):
+                # Tab containing chatbot and related options
+                with gr.Tab(label="RAG Chat"):
+                    # Chat history options
+                    with gr.Row(equal_height=True):
+                        history_file = gr.File(
+                            show_label=False,
+                            height=65
                         )
-                        context_files = gr.Files(
-                            show_label=False
+                        upload_history = gr.Button(
+                            value="Upload History to Chat"
                         )
-                    
-                    # View current context files
-                    with gr.Column():
-                        gr.Markdown(value="<center><h1>Context Files on Server</h1></center>")
-                        with gr.Row(equal_height=True):
-                            download_all_context = gr.Button(
-                                value="Download All Context Files"
-                            )
-                            purge_context = gr.Button(
-                                value="Purge All Context Files",
-                                variant="stop"
-                            )
+                        save_name = gr.Textbox(
+                            placeholder="Enter the filename you would like to use",
+                            label="Chat History File Name"
+                        )
+                        save_history = gr.Button(
+                            value="Save Chat History",
+                            min_width=0
+                        )
+                        view_history = gr.Chatbot(
+                            type="messages",
+                            visible=False
+                        )
 
-                        view_context_files = gr.Files(
+                    # Chat interface
+                    # Chatbox and Textbox specified to allow customization
+                    main_chat = gr.ChatInterface(
+                        run_rag,
+                        type="messages",
+                        chatbot=gr.Chatbot(
+                            type="messages",
+                            show_label=False,
+                            height=550,
+                            avatar_images=(None, None),
+                            placeholder="# Welcome to the experimental RAG system!",
+                            layout=cur_layout
+                        ),
+                        textbox=gr.Textbox(
+                            type='text',
+                            placeholder='Enter a query...',
                             show_label=False
-                        )
+                        ),
+                        additional_inputs=[
+                            use_history,
+                            embedding_choice,
+                            model_choice,
+                            num_docs,
+                            chunk_size,
+                            chunk_overlap,
+                            refresh_db,
+                            view_history
+                        ]
+                    )
+                
+                # Tab containing context file information
+                with gr.Tab(label="Manage Context Files") as context_tab:
+                    with gr.Row():
+                        # Upload context files
+                        with gr.Column():
+                            gr.Markdown(value="<center><h1>Upload Context Files</h1></center>")
+                            upload_context = gr.Button(
+                                value="Upload to RAG Server",
+                                variant="primary"
+                            )
+                            context_files = gr.Files(
+                                show_label=False
+                            )
+                        
+                        # View current context files
+                        with gr.Column():
+                            gr.Markdown(value="<center><h1>Context Files on Server</h1></center>")
+                            with gr.Row(equal_height=True):
+                                download_all_context = gr.Button(
+                                    value="Download All Context Files"
+                                )
+                                purge_context = gr.Button(
+                                    value="Purge All Context Files",
+                                    variant="stop"
+                                )
+
+                            view_context_files = gr.Files(
+                                show_label=False
+                            )
 
         # Customization options
         with gr.Sidebar(width=200, open=False, position="right"):
@@ -510,8 +509,8 @@ def setup_layout(css, saved_color, theme, cur_layout):
         reset_chunk_opts.click(chunk_opt_defaults, outputs=[chunk_size, chunk_overlap])
 
         # Handle customization options
-        theme_color.change(update_theme_color, inputs=[theme_color])
         chat_layout.change(update_chat_layout, inputs=[chat_layout], outputs=[main_chat.chatbot])
+        theme_color.change(update_theme_color, inputs=[theme_color])
         reload_app.click(update_reload)
 
     return app

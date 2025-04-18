@@ -56,14 +56,15 @@ def get_vars(embedding_choice=None, model_choice=None, num_docs=None, upload=Fal
     roots = dict()
     roots["EMBEDDING_ROOT"] = "D:\\Desktop\\AI\\Embeddings\\"
     roots["MODEL_ROOT"] = "D:\\Desktop\\AI\\LLMs\\"
-    roots["PROJECT_ROOT"] = os.path.abspath(os.path.dirname(__file__))
-    roots["CONTEXT_ROOT"] = os.path.join(roots["PROJECT_ROOT"], "context_files\\")
+    roots["SERVER_ROOT"] = os.path.abspath(os.path.dirname(__file__))
+    roots["TOPIC_ROOT"] = roots["SERVER_ROOT"]
+    roots["CONTEXT_ROOT"] = os.path.join(roots["TOPIC_ROOT"], "context_files\\")
     roots["PDF_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "pdf_files\\")
     roots["CSV_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "csv_files\\")
     roots["TXT_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "txt_files\\")
-    roots["CHROMA_ROOT"] = os.path.join(roots["PROJECT_ROOT"], "chroma_db_files\\")
+    roots["CHROMA_ROOT"] = os.path.join(roots["TOPIC_ROOT"], "chroma_db_files\\")
     roots["MODIFIED_ROOT"] = os.path.join(roots["CHROMA_ROOT"], "(0)modified-times\\")
-    roots["API_ROOT"] = os.path.join(roots["PROJECT_ROOT"], "api_keys\\")
+    roots["API_ROOT"] = os.path.join(roots["TOPIC_ROOT"], "api_keys\\")
 
     # Create structural directories, if they don't exist
     ordered_roots = [
@@ -241,12 +242,28 @@ def load_database(vars, embedding):
     # Create directory for database using current embedding model, if needed
     cur_embed_db = os.path.join(roots["CHROMA_ROOT"], f"{embedding_choice}")
     if not os.path.exists(cur_embed_db):
-        need_refresh = True
         try:
             os.mkdir(cur_embed_db)
         except Exception as e:
-            print(f"Error:\n{e}")
-            exit(1)
+            raise Exception(f"Error creating database directory for {embedding_choice}")
+
+    # Determine last modified time of context information
+    try:
+        with open(f"{roots['CONTEXT_ROOT']}last_modified.txt", "r") as inf:
+            cur_context_time = float(inf.readline().strip())
+    except:
+        raise Exception("Cannot make database as no context information is provided")
+
+    # Determine last modified time of current embedding's database
+    try:
+        with open(f"{roots['MODIFIED_ROOT']}{embedding_choice}.txt", "r") as inf:
+            cur_db_time = float(inf.readline().strip())
+    except:
+        cur_db_time = 0
+
+    # Determine if database is out of sync with context information
+    if cur_db_time < cur_context_time:
+        need_refresh = True
 
     # Load or build database
     db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db)
@@ -255,9 +272,8 @@ def load_database(vars, embedding):
         try:
             db._client.delete_collection(embedding_choice)
             db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db)
-        except Exception as e:
-            print(f"Error:\n{e}")
-            exit(1)
+        except:
+            raise Exception(f"Error deleting and remaking database for {embedding_choice}")
         
         # Give context information to database
         context_locs = {
