@@ -153,6 +153,15 @@ def update_theme_color(cur_color):
         outf.write(cur_color)
 
 
+# Javascript needed for changing theme mode
+def theme_mode_js():
+    return """
+    () => {
+        document.body.classList.toggle('dark');
+    }
+    """
+
+
 # Update chat layout
 def update_chat_layout(cur_layout):
     with open("./customization/chat_layout.txt", "w", encoding="utf-8") as outf:
@@ -476,14 +485,18 @@ def setup_layout(css, saved_color, theme, cur_layout):
                     value=cur_layout,
                     label="Chat Style"
                 )
+                theme_mode = gr.Button(
+                    value="Toggle Dark Mode",
+                    variant="primary"
+                )
 
             # Settings that do need a restart            
             with gr.Group():
+                gr.Markdown("Require restart:")
                 theme_color = gr.Dropdown(
                     ["slate", "gray", "zinc", "neutral", "stone", "red", "orange", "amber", "yellow", "lime", "green", "emerald", "teal", "cyan", "sky", "blue", "indigo", "violet", "purple", "fuchsia", "pink", "rose"],
                     value=saved_color,
                     label="Theme Color",
-                    info="Change requires restart",
                     interactive=True
                 )
                 reload_app = gr.Button(
@@ -510,6 +523,8 @@ def setup_layout(css, saved_color, theme, cur_layout):
 
         # Handle customization options
         chat_layout.change(update_chat_layout, inputs=[chat_layout], outputs=[main_chat.chatbot])
+        mode_js = theme_mode_js()
+        theme_mode.click(None, js=mode_js)
         theme_color.change(update_theme_color, inputs=[theme_color])
         reload_app.click(update_reload)
 
