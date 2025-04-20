@@ -1,19 +1,10 @@
-# Exclude ChromaDB files
-rag/chroma_db_files/
-
-# Exclude all context files, and folder for old context files, but not the structural folders
-rag/context_files/alt/
-rag/context_files/csv_files/
-rag/context_files/pdf_files/
-rag/context_files/txt_files/
-rag/context_files/last_modified.txt
-
-# Exclude all api keys
-rag/api_keys/*
+# Exclude all rag server files other than code
+rag/
+!rag/RAG.py
+!rag/rag_server.py
 
 # Exclude any files created by running code
 __pycache__/
-rag/__pycache__/
 
 # Exclude builder file
 builder.py
@@ -21,6 +12,8 @@ builder.py
 # Exclude customization file
 customization/theme_color.txt
 customization/chat_layout.txt
+customization/all_topics.txt
+customization/current_topic.txt
 
 # Exclude webui folders
 histories/

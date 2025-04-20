@@ -1,7 +1,8 @@
 from RAG import *
 from flask import Flask, request, jsonify, send_from_directory # type: ignore
 from werkzeug.utils import secure_filename # type: ignore
-import os
+from shutil import rmtree
+import os, gc
 
 app = Flask(__name__)
 
@@ -10,17 +11,60 @@ vars = None
 embedding = None
 db = None
 model = None
+cur_topic = None
 
 
-@app.route("/context", methods=["POST"])
-def context():
+@app.route("/delete_topic/<topic>", methods=["POST"])
+def delete_topic(topic):
+    global vars, embedding, db, cur_topic
+
+    # Get data from request
+    embedding_choice = request.form["embedding_choice"]
+
+    # Get old topic root
+    vars = get_vars(topic, embedding_choice=embedding_choice)
+    topic_root = vars["roots"]["TOPIC_ROOT"]
+
+    # Reset settings to Default topic
+    embedding = load_embedding(vars)
+    if db is not None:
+        db._client.delete_collection(embedding_choice)
+        db._client.clear_system_cache()
+        db._client.reset()
+        del db
+        gc.collect()
+        db = None
+    cur_topic = "Default"
+
+    # Remove old topic files
+    try:
+        rmtree(topic_root)
+    except Exception as e:
+        return jsonify({"status": "error", "issue": e.args[0]})
+    
+    return jsonify({"status": "ok"})
+
+
+@app.route("/new_topic/<topic>", methods=["POST"])
+def new_topic(topic):
+    global vars, embedding, db, cur_topic
+
+    # Get data from request
+    embedding_choice = request.form["embedding_choice"]
+
+    get_vars(topic, only_roots=True)
+    db = None
+    cur_topic = topic
+
+    return jsonify({"status": "ok"})
+
+
+@app.route("/context/<topic>", methods=["POST"])
+def context(topic):
     global vars
 
     # Get needed variables
-    if vars is None:
-        roots = get_vars(upload=True)
-    else:
-        roots = vars["roots"]
+    roots = get_vars(topic, only_roots=True)
 
     # add all files to output
     output = []
@@ -34,15 +78,12 @@ def context():
     return jsonify({'files': output})
 
 
-@app.route("/download/<name>")
-def download_file(name):
+@app.route("/download/<topic>/<name>")
+def download_file(topic, name):
     global vars
 
     # Get needed variables
-    if vars is None:
-        roots = get_vars(upload=True)
-    else:
-        roots = vars["roots"]
+    roots = get_vars(topic, only_roots=True)
 
     # Determine directory file is in
     ext = name.split('.')[-1].strip().upper()
@@ -51,15 +92,12 @@ def download_file(name):
     return send_from_directory(root_dir, name)
 
 
-@app.route("/delete/<name>", methods=["POST"])
-def delete_file(name):
+@app.route("/delete/<topic>/<name>", methods=["POST"])
+def delete_file(topic, name):
     global vars
 
     # Get needed variables
-    if vars is None:
-        roots = get_vars(upload=True)
-    else:
-        roots = vars["roots"]
+    roots = get_vars(topic, only_roots=True)
 
     # Determine directory file is in    
     ext = name.split('.')[-1].strip().upper()
@@ -77,15 +115,12 @@ def delete_file(name):
         return jsonify({'status': 'error'})
 
 
-@app.route("/upload", methods=["POST"])
-def upload():
+@app.route("/upload/<topic>", methods=["POST"])
+def upload(topic):
     global vars
 
     # Get needed variables
-    if vars is None:
-        roots = get_vars(upload=True)
-    else:
-        roots = vars["roots"]
+    roots = get_vars(topic, only_roots=True)
 
     # Get variables from frontend
     file = request.files['file']
@@ -107,9 +142,9 @@ def upload():
         return jsonify({'status': 'error', 'file': filename})
 
 
-@app.route("/setup", methods=["POST"])
-def setup():
-    global vars, embedding, db, model
+@app.route("/setup/<topic>", methods=["POST"])
+def setup(topic):
+    global vars, embedding, db, model, cur_topic
 
     # Get variables from frontend
     cur_vars = {"embedding_choice": None, "model_choice": None}
@@ -131,24 +166,21 @@ def setup():
         refresh_db = False
 
     # Check if initial setup should happen
-    if vars is None:
+    if (vars is None) or (embedding is None) or (db is None) or (model is None):
         try:
-            vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
+            vars = get_vars(topic, cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
         except Exception as e:
             return jsonify({"status": "error", "issue": e.args[0]})
-
         vars["chunk_size"] = chunk_size
         vars["chunk_overlap"] = chunk_overlap
         vars["args"].refresh_db = refresh_db
-    if embedding is None:
         embedding = load_embedding(vars)
-    if db is None:
         try:
             db = load_database(vars, embedding)
         except Exception as e:
             return jsonify({"status": "error", "issue": e.args[0]})
-    if model is None:
         model = load_model(vars)
+        cur_topic = topic
     else:
         # Check which options need updating
         updates = {"embedding_choice": False, "model_choice": False}
@@ -157,9 +189,14 @@ def setup():
                 updates[var] = True
         
         try:
-            vars = get_vars(cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
+            vars = get_vars(topic, cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
         except Exception as e:
             return jsonify({"status": "error", "issue": e.args[0]})
+
+        # Update topic, if needed
+        if cur_topic != topic:
+            cur_topic = topic
+            db = load_database(vars, embedding)
 
         # Update embedding model, if needed
         if updates["embedding_choice"]:
@@ -186,13 +223,21 @@ def setup():
     return jsonify({"status": "ok"})
 
 
-@app.route("/response", methods=["POST"])
-def response():
+@app.route("/response/<topic>", methods=["POST"])
+def response(topic):
     global vars, db, model
 
     # Get needed variables
+    roots = vars["roots"]
     local_model = vars["local_model"]
     model_choice = vars["model_choice"]
+
+    # Determine if all context directories are empty
+    context_roots = ["PDF_ROOT", "CSV_ROOT", "TXT_ROOT"]
+    has_context = [bool(os.listdir(roots[root])) for root in context_roots]
+    need_context = not any(has_context)
+    if need_context:
+        return jsonify({"response": "No context files have been provided, at least one is needed."})
 
     # Get variables from frontend
     try:

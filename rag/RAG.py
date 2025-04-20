@@ -8,14 +8,14 @@ from langchain.prompts import ChatPromptTemplate # type: ignore
 from langchain_core.output_parsers import StrOutputParser # type: ignore
 from langchain_core.messages import HumanMessage, SystemMessage # type: ignore
 from langchain_chroma import Chroma # type: ignore
+from chromadb.config import Settings
 from langchain_ollama import OllamaEmbeddings # type: ignore
 from langchain_ollama import ChatOllama # type: ignore
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline, ChatHuggingFace # type: ignore
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from time import time, gmtime, strftime
 from sys import exit
-from shutil import rmtree
-import os, argparse
+import os, argparse, gc
 
 
 def parse_arguments():
@@ -33,14 +33,16 @@ def parse_arguments():
 
     return args
 
-def get_vars(embedding_choice=None, model_choice=None, num_docs=None, upload=False):
+
+def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_docs=None, only_roots=False):
     """Define setup variables.
 
     Args:
+      topic: Which directory to use for context and database files.
       embedding_choice: Which embedding model to use. Defaults to None, to be overwritten.
       model_choice: Which chat model to use. Defaults to None, to be overwritten.
       num_docs: Number of chunks to use for answers. Defaults to None, as a flag for argparse.
-      upload: Whether the current action is uploading files. Defaults to False.
+      only_roots: Whether to only return roots. Defaults to False.
 
     Returns:
       Dicitonary containing all variables to be used by other functions.
@@ -57,7 +59,7 @@ def get_vars(embedding_choice=None, model_choice=None, num_docs=None, upload=Fal
     roots["EMBEDDING_ROOT"] = "D:\\Desktop\\AI\\Embeddings\\"
     roots["MODEL_ROOT"] = "D:\\Desktop\\AI\\LLMs\\"
     roots["SERVER_ROOT"] = os.path.abspath(os.path.dirname(__file__))
-    roots["TOPIC_ROOT"] = roots["SERVER_ROOT"]
+    roots["TOPIC_ROOT"] = os.path.join(roots["SERVER_ROOT"], f"{topic}\\")
     roots["CONTEXT_ROOT"] = os.path.join(roots["TOPIC_ROOT"], "context_files\\")
     roots["PDF_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "pdf_files\\")
     roots["CSV_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "csv_files\\")
@@ -68,6 +70,7 @@ def get_vars(embedding_choice=None, model_choice=None, num_docs=None, upload=Fal
 
     # Create structural directories, if they don't exist
     ordered_roots = [
+        "TOPIC_ROOT",
         "API_ROOT",
         "CHROMA_ROOT",
         "MODIFIED_ROOT",
@@ -80,19 +83,12 @@ def get_vars(embedding_choice=None, model_choice=None, num_docs=None, upload=Fal
         if not os.path.exists(roots[root]):
             try:
                 os.mkdir(roots[root])
-            except:
-                raise Exception("Could not create structural directories.")
+            except Exception as e:
+                raise Exception(f"Could not create structural directory for {root}")
 
-    # Exit early if uploading
-    if upload:
+    # Exit early if only returning roots
+    if only_roots:
         return roots
-
-    # Determine if all context directories are empty
-    context_roots = ["PDF_ROOT", "CSV_ROOT", "TXT_ROOT"]
-    has_context = [bool(os.listdir(roots[root])) for root in context_roots]
-    need_context = not any(has_context)
-    if need_context:
-        raise Exception("No context files have been provided, at least one is needed.")
 
     # Embedding to use, determines if running online
     embeddings_dict = {
@@ -266,12 +262,16 @@ def load_database(vars, embedding):
         need_refresh = True
 
     # Load or build database
-    db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db)
+    db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db, client_settings=Settings(allow_reset=True))
     if need_refresh:
         # Remove old database info
         try:
             db._client.delete_collection(embedding_choice)
-            db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db)
+            db._client.clear_system_cache()
+            db._client.reset()
+            del db
+            gc.collect()
+            db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db, client_settings=Settings(allow_reset=True))
         except:
             raise Exception(f"Error deleting and remaking database for {embedding_choice}")
         
@@ -285,7 +285,8 @@ def load_database(vars, embedding):
         chunks = load_and_chunk(text_splitter, context_locs)
         for key in chunks.keys():
             if chunks[key] is not None:
-                db.add_documents(documents=chunks[key])
+                for item in chunks[key]:
+                    db.add_documents(documents=[item])
         
         # Save current time as last modified time for context information for this embedding
         with open(f"{roots['MODIFIED_ROOT']}{embedding_choice}.txt", "w") as outf:
@@ -357,6 +358,7 @@ def get_response(vars, db, model, user_query=None, user_history=None):
     model_choice = vars["model_choice"]
     models_dict = vars["models_dict"]
 
+    context_text = None
     if (user_query is not None) and (user_history is not None):
         # Set up context
         cur_chunks = db.similarity_search_with_score(user_query, k=args.num_docs)
@@ -413,6 +415,8 @@ def get_response(vars, db, model, user_query=None, user_history=None):
         else:
             response = model.invoke(prompt)
     
+    if context_text is not None:
+        response = f"{response.content}\n\nContext used:\n{context_text}"
     return response
 
 
