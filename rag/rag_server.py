@@ -2,6 +2,7 @@ from RAG import *
 from flask import Flask, request, jsonify, send_from_directory # type: ignore
 from werkzeug.utils import secure_filename # type: ignore
 from shutil import rmtree
+import pandas as pd
 import os, gc
 
 app = Flask(__name__)
@@ -12,6 +13,53 @@ embedding = None
 db = None
 model = None
 cur_topic = None
+
+
+@app.route("/get_api_keys/<topic>", methods=["POST"])
+def get_api_keys(topic):
+    # Get api root and file
+    roots = get_vars(topic, only_roots=True)
+    api_key_root = os.path.join(roots["API_ROOT"], "api_keys.csv")
+
+    # Try making a new file if no file exists
+    if not os.path.exists(api_key_root):
+        try:
+            with open(api_key_root, "w", encoding="utf-8") as outf:
+                pass
+            return jsonify({"status": "ok", "data": ""})
+        except Exception as e:
+            return jsonify({"status": "error", "issue": e.args[0]})
+    
+    # Try reading the file, using an empty string if the file is empty
+    try:
+        df = pd.read_csv(api_key_root, header=None)
+        return jsonify({"status": "ok", "data": df.to_json()})
+    except:
+        df = ""
+        return jsonify({"status": "ok", "data": df})
+
+
+@app.route("/save_api_keys/<topic>", methods=["POST"])
+def save_api_keys(topic):
+    # Get api file path
+    roots = get_vars(topic, only_roots=True)
+    api_keys_root = roots["API_ROOT"]
+
+    # Get new file
+    file = request.files['file']
+
+    # Remove old file
+    try:
+        os.remove(os.path.join(api_keys_root, "api_keys.csv"))
+    except Exception as e:
+        return jsonify({"staus": "error", "issue": e.args[0]})
+
+    # Save new file
+    try:
+        file.save(os.path.join(api_keys_root, "api_keys.csv"))
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "issue": e.args[0]})
 
 
 @app.route("/delete_topic/<topic>", methods=["POST"])
@@ -49,9 +97,7 @@ def delete_topic(topic):
 def new_topic(topic):
     global vars, embedding, db, cur_topic
 
-    # Get data from request
-    embedding_choice = request.form["embedding_choice"]
-
+    # Set settings to new topic
     get_vars(topic, only_roots=True)
     db = None
     cur_topic = topic
@@ -116,7 +162,7 @@ def delete_file(topic, name):
 
 
 @app.route("/upload/<topic>", methods=["POST"])
-def upload(topic):
+def upload_file(topic):
     global vars
 
     # Get needed variables
@@ -248,9 +294,13 @@ def response(topic):
         user_history = request.form["user_history"]
     except:
         user_history = None
+    try:
+        chain_of_agents = request.form["chain_of_agents"]
+    except:
+        chain_of_agents = None
 
     # Get response from RAG system
-    response = get_response(vars, db, model, user_query=user_query, user_history=user_history)
+    response = get_response(vars, db, model, user_query=user_query, user_history=user_history, chain_of_agents=chain_of_agents)
 
     # Format response
     if not isinstance(response, str):

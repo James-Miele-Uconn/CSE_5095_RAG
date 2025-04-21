@@ -1,6 +1,7 @@
 from time import sleep, strftime, gmtime
 from shutil import copy
 import gradio as gr # type: ignore
+import pandas as pd
 import requests, os
 
 # Hack to allow downloading files from localhost
@@ -264,9 +265,8 @@ def delete_current_topic(cur_topic, embedding_choice):
 
 
 # Make new topic
-def make_new_topic(new_topic, embedding_choice):
-    data = {"embedding_choice": embedding_choice}
-    resp = requests.post(f"http://127.0.0.1:5000/new_topic/{new_topic}", data=data)
+def make_new_topic(new_topic):
+    resp = requests.post(f"http://127.0.0.1:5000/new_topic/{new_topic}")
     mk_resp = resp.json()
     if not mk_resp["status"] == "ok":
         raise gr.Error("Issue making new topic", duration=None)
@@ -293,6 +293,43 @@ def make_new_topic(new_topic, embedding_choice):
     save_current_topic(new_topic)
 
     return [gr.Textbox(value=""), gr.Dropdown(topics, value=new_topic)]
+
+
+# Show api keys
+def show_api_keys(cur_topic):
+    resp = requests.post(f"http://127.0.0.1:5000/get_api_keys/{cur_topic}")
+    api_resp = resp.json()
+    if api_resp["status"] == "error":
+        raise gr.Error(api_resp["issue"], duration=None)
+    
+    if api_resp["data"] == "":
+        df = pd.DataFrame()
+    else:
+        apis = eval(api_resp["data"])["0"]
+        keys = eval(api_resp["data"])["1"]
+        api_vals = [apis[f"{idx}"] for idx in sorted(apis.keys())]
+        key_vals = [keys[f"{idx}"] for idx in sorted(keys.keys())]
+        data = {"API": api_vals, "Key": key_vals}
+        df = pd.DataFrame(data=data)
+
+    return gr.Dataframe(value=df)
+
+
+# Save api keys
+def save_api_keys(cur_topic, api_keys):
+    api_keys.to_csv("./temp_csv.csv", header=False, index=False)
+
+    cur_file = {"file": open("./temp_csv.csv", "rb")}
+    resp = requests.post(f"http://127.0.0.1:5000/save_api_keys/{cur_topic}", files=cur_file)
+    upload_resp = resp.json()
+    if not upload_resp["status"] == "ok":
+        raise gr.Error(upload_resp["issue"])
+    
+    try:
+        os.remove("./temp_csv.csv")
+    except:
+        pass
+    gr.Info("API Keys Saved")
 
 
 # Update embedding options based on currently chosen type
@@ -324,7 +361,7 @@ def chunk_opt_defaults():
 
 
 # Main chat function
-def run_rag(message, history, cur_topic, use_history, embedding_choice, model_choice, num_docs, chunk_size, chunk_overlap, refresh_db, uploaded_history):
+def run_rag(message, history, cur_topic, use_history, chain_of_agents, embedding_choice, model_choice, num_docs, chunk_size, chunk_overlap, refresh_db, uploaded_history):
     """Ensure the RAG system uses the desired setup, then request an answer from the system.
 
     Args:
@@ -332,6 +369,7 @@ def run_rag(message, history, cur_topic, use_history, embedding_choice, model_ch
       history: OpenAI style of conversation history for this session.
       cur_topic: Which topic directory to use
       use_history: Whether to use summary of chat history in query response.
+      chain_of_agents: Whether to use a chain of agents to summarize context.
       embedding_choice: Currently chosen embedding model to use.
       model_choice: Currently chosen chat model to use.
       num_docs: Number of chunks to use when creating an answer.
@@ -377,12 +415,12 @@ def run_rag(message, history, cur_topic, use_history, embedding_choice, model_ch
         hist_summary = resp.json()['response']
 
         # Send query and history summary
-        resp_info = {"user_query": message, "user_history": hist_summary}
+        resp_info = {"user_query": message, "user_history": hist_summary, "chain_of_agents": chain_of_agents}
         resp = requests.post(f"http://127.0.0.1:5000/response/{cur_topic}", data=resp_info)
         response = resp.json()['response']
     else:
         # Send query to RAG system
-        resp_info = {"user_query": message}
+        resp_info = {"user_query": message, "chain_of_agents": chain_of_agents}
         resp = requests.post(f"http://127.0.0.1:5000/response/{cur_topic}", data=resp_info)
         response = resp.json()['response']
 
@@ -491,13 +529,17 @@ def setup_layout(css, saved_color, theme, cur_layout):
                 with gr.Column():
                     num_docs = gr.Slider(
                         1,
-                        10,
+                        30,
                         value=5,
                         step=1,
                         label="Number of chunks to use when answering query"
                     )
                     use_history = gr.Checkbox(
                         label="Add summary of chat history to query",
+                        value=False
+                    )
+                    chain_of_agents = gr.Checkbox(
+                        label="Use Chain of Agents to summarize each chunk",
                         value=False
                     )
 
@@ -575,6 +617,7 @@ def setup_layout(css, saved_color, theme, cur_layout):
                         additional_inputs=[
                             cur_topic,
                             use_history,
+                            chain_of_agents,
                             embedding_choice,
                             model_choice,
                             num_docs,
@@ -631,6 +674,19 @@ def setup_layout(css, saved_color, theme, cur_layout):
                                 show_label=False
                             )
 
+                # Tab containing API key info
+                with gr.Tab(label="Manage API Keys") as api_tab:
+                    with gr.Row(equal_height=True):
+                        save_keys = gr.Button(
+                            value="Save API Keys",
+                            variant="primary"
+                        )
+                    api_keys = gr.Dataframe(
+                        headers=["API", "Key"],
+                        show_label=False,
+                        interactive=True
+                    )
+
         # Customization options
         with gr.Sidebar(width=200, open=False, position="right"):
             # Settings that don't need a restart
@@ -659,10 +715,14 @@ def setup_layout(css, saved_color, theme, cur_layout):
                     variant="stop"
                 )
 
+        # Handle API keys
+        api_tab.select(show_api_keys, inputs=[cur_topic], outputs=[api_keys])
+        save_keys.click(save_api_keys, inputs=[cur_topic, api_keys])
+
         # Handle topics
         cur_topic.change(save_current_topic, inputs=[cur_topic])
         delete_topic.click(delete_current_topic, inputs=[cur_topic, embedding_choice], outputs=[cur_topic])
-        make_topic.click(make_new_topic, inputs=[new_topic_name, embedding_choice], outputs=[new_topic_name, cur_topic])
+        make_topic.click(make_new_topic, inputs=[new_topic_name], outputs=[new_topic_name, cur_topic])
 
         # Handle context files
         context_tab.select(show_context_files, inputs=[cur_topic], outputs=[view_context_files])

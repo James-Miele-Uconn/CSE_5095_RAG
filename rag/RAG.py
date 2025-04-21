@@ -8,7 +8,7 @@ from langchain.prompts import ChatPromptTemplate # type: ignore
 from langchain_core.output_parsers import StrOutputParser # type: ignore
 from langchain_core.messages import HumanMessage, SystemMessage # type: ignore
 from langchain_chroma import Chroma # type: ignore
-from chromadb.config import Settings
+from chromadb.config import Settings # type: ignore
 from langchain_ollama import OllamaEmbeddings # type: ignore
 from langchain_ollama import ChatOllama # type: ignore
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline, ChatHuggingFace # type: ignore
@@ -284,9 +284,13 @@ def load_database(vars, embedding):
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         chunks = load_and_chunk(text_splitter, context_locs)
         for key in chunks.keys():
+            # Ensure batch size is less than max size (currently 5461)
             if chunks[key] is not None:
-                for item in chunks[key]:
-                    db.add_documents(documents=[item])
+                if len(chunks[key]) > 5461:
+                    for idx in range(0, len(chunks[key]), 5461):
+                        db.add_documents(documents=chunks[key][idx:idx+5461])
+                else:
+                    db.add_documents(documents=chunks[key])
         
         # Save current time as last modified time for context information for this embedding
         with open(f"{roots['MODIFIED_ROOT']}{embedding_choice}.txt", "w") as outf:
@@ -340,7 +344,7 @@ def load_models_and_db(vars):
     return (db, model)
 
 
-def get_response(vars, db, model, user_query=None, user_history=None):
+def get_response(vars, db, model, user_query=None, user_history=None, chain_of_agents=None):
     """Given input and some desired response type, create a prompt and receive a response.
 
     Args:
@@ -349,6 +353,7 @@ def get_response(vars, db, model, user_query=None, user_history=None):
       model: Chat model to use.
       user_query: The query to give to the chat model. Defaults to None.
       user_history: The history to give to the chat model. Defaults to None.
+      chain_of_agents: Whether to use a chain of agents to summarize context.
     
     Returns:
       Response received from the LLM model used
@@ -360,9 +365,55 @@ def get_response(vars, db, model, user_query=None, user_history=None):
 
     context_text = None
     if (user_query is not None) and (user_history is not None):
-        # Set up context
+        # Get context information
         cur_chunks = db.similarity_search_with_score(user_query, k=args.num_docs)
-        context_text = "\n\n".join([chunk.page_content for chunk, _score in cur_chunks])
+        context_chunks = [chunk.page_content for chunk, _score in cur_chunks]
+
+        # Create context text
+        if chain_of_agents:
+            cur_summary = None
+            for chunk in context_chunks:
+                # Create prompt
+                if cur_summary is None:
+                    prompt_template = """
+                    Create a summary of the following chunk of context information:
+                    {context}
+                    """
+                    prompt_template = ChatPromptTemplate.from_template(prompt_template)
+                    prompt = prompt_template.format(context=chunk)
+                else:
+                    prompt_template = """
+                    Below is a summary of the previous context information used:
+                    {summary}
+                    Using the above information, create a summary of the following chunk of context information:
+                    {context}
+                    """
+                    prompt_template = ChatPromptTemplate.from_template(prompt_template)
+                    prompt = prompt_template.format(summary=cur_summary, context=chunk)
+
+                # Get response
+                if (model_choice == "openai"):
+                    response = model.invoke(prompt)
+                else:
+                    if (model_choice in models_dict["local"]):
+                        response = model.invoke(prompt)
+                    else:
+                        response = model.invoke(prompt)
+                response = response.content
+
+                # Format response
+                if (model_choice == "Mistral-7B-Instruct-v0.3"):
+                    prompt_end = response.find("[/INST]")
+                    response = response[(prompt_end + 7):]
+                elif ("deepseek-r1" in model_choice):
+                    think_end = response.find("</think>")
+                    response = response[(think_end + 8):]
+                cur_summary = response
+
+            chunk_text = "\n\n".join(context_chunks)
+            context_text = f"Summary:\n{cur_summary}\n\nChunks:\n{chunk_text}"
+        else:
+            context_text = "\n\n".join(context_chunks)
 
         # Set up prompt
         prompt_template = """
@@ -378,9 +429,55 @@ def get_response(vars, db, model, user_query=None, user_history=None):
         prompt_template = ChatPromptTemplate.from_template(prompt_template)
         prompt = prompt_template.format(history=user_history, context=context_text, question=user_query)
     elif user_query is not None:
-        # Set up context
+        # Get context information
         cur_chunks = db.similarity_search_with_score(user_query, k=args.num_docs)
-        context_text = "\n\n".join([chunk.page_content for chunk, _score in cur_chunks])
+        context_chunks = [chunk.page_content for chunk, _score in cur_chunks]
+
+        # Create context text
+        if chain_of_agents:
+            cur_summary = None
+            for chunk in context_chunks:
+                # Create prompt
+                if cur_summary is None:
+                    prompt_template = """
+                    Create a summary of the following chunk of context information:
+                    {context}
+                    """
+                    prompt_template = ChatPromptTemplate.from_template(prompt_template)
+                    prompt = prompt_template.format(context=chunk)
+                else:
+                    prompt_template = """
+                    Below is a summary of the previous context information used:
+                    {summary}
+                    Using the above information, create a summary of the following chunk of context information:
+                    {context}
+                    """
+                    prompt_template = ChatPromptTemplate.from_template(prompt_template)
+                    prompt = prompt_template.format(summary=cur_summary, context=chunk)
+
+                # Get response
+                if (model_choice == "openai"):
+                    response = model.invoke(prompt)
+                else:
+                    if (model_choice in models_dict["local"]):
+                        response = model.invoke(prompt)
+                    else:
+                        response = model.invoke(prompt)
+                response = response.content
+
+                # Format response
+                if (model_choice == "Mistral-7B-Instruct-v0.3"):
+                    prompt_end = response.find("[/INST]")
+                    response = response[(prompt_end + 7):]
+                elif ("deepseek-r1" in model_choice):
+                    think_end = response.find("</think>")
+                    response = response[(think_end + 8):]
+                cur_summary = response
+
+            chunk_text = "\n\n".join(context_chunks)
+            context_text = f"Summary:\n{cur_summary}\n\nChunks:\n{chunk_text}"
+        else:
+            context_text = "\n\n".join(context_chunks)
 
         # Set up prompt
         prompt_template = """
@@ -416,75 +513,5 @@ def get_response(vars, db, model, user_query=None, user_history=None):
             response = model.invoke(prompt)
     
     if context_text is not None:
-        response = f"{response.content}\n\nContext used:\n{context_text}"
+        response = f"{response.content}\n\n[]----------[ Context ]----------[]\n\n{context_text}"
     return response
-
-
-def query_loop(vars, db, model):
-    """Receive answer to a query, with ability to save to .txt file.
-
-    Args:
-      vars: Dictionary containing setup variables.
-      db: Database of context information.
-      model: Chat model to use.
-    """
-    # Get needed variables
-    args = vars["args"]
-    local_model = vars["local_model"]
-    model_choice = vars["model_choice"]
-
-    while True:
-        # Receive response to query
-        print("\n\nWelcome to the experimental RAG system! Enter a prompt, or 'exit' to exit.")
-        print("\nHow can I help?\n")
-
-        query = None
-        try:
-            query = input()
-        except KeyboardInterrupt as e:
-            if query is not None:
-                pass
-            else:
-                break
-
-        if query.lower() == "exit":
-            break
-        elif query == "":
-            print("Please enter a query.")
-            continue
-
-        response = get_response(vars, db, model, user_query=query)
-
-        # Create output for question and response
-        output = "\n"
-
-        # Extract string of response, if needed
-        if not isinstance(response, str):
-            response = response.content
-
-        # Add response to output
-        if local_model:
-            if (model_choice == "Mistral-7B-Instruct-v0.3"):
-                prompt_end = response.find("[/INST]")
-                output += response[(prompt_end + 7):]
-            elif ("deepseek-r1" in model_choice):
-                think_end = response.find("</think>")
-                output += response[(think_end + 8):]
-            else:
-                output += response
-        else:
-            output += response
-
-        # Print response for convenience
-        print(output)
-
-    print("\nThank you for using the RAG system!")
-    return
-
-
-if __name__ == "__main__":
-    vars = get_vars()
-    embedding = load_embedding(vars)
-    db = load_database(vars, embedding)
-    model = load_model(vars)
-    query_loop(vars, db, model)
