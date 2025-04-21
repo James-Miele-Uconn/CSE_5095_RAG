@@ -62,6 +62,21 @@ def save_api_keys(topic):
         return jsonify({"status": "error", "issue": e.args[0]})
 
 
+@app.route("/purge_api_keys/<topic>", methods=["POST"])
+def purge_api_keys(topic):
+    # Get api file path
+    roots = get_vars(topic, only_roots=True)
+    api_keys_path = os.path.join(roots["API_ROOT"], "api_keys.csv")
+
+    try:
+        with open(api_keys_path, "w", encoding="utf-8"):
+            pass
+    except Exception as e:
+        return jsonify({"status": "error", "issue": e.args[0]})
+    
+    return jsonify({"status": "ok"})
+
+
 @app.route("/delete_topic/<topic>", methods=["POST"])
 def delete_topic(topic):
     global vars, embedding, db, cur_topic
@@ -220,12 +235,26 @@ def setup(topic):
         vars["chunk_size"] = chunk_size
         vars["chunk_overlap"] = chunk_overlap
         vars["args"].refresh_db = refresh_db
-        embedding = load_embedding(vars)
+
+        try:
+            embedding = load_embedding(vars)
+        except KeyError as e:
+            return jsonify({"status": "error", "issue": f"No API key for {e.args[0]}"})
+        except Exception as e:
+            return jsonify({"status": "error", "issue": e})
+
         try:
             db = load_database(vars, embedding)
         except Exception as e:
-            return jsonify({"status": "error", "issue": e.args[0]})
-        model = load_model(vars)
+            return jsonify({"status": "error", "issue": e})
+
+        try:
+            model = load_model(vars)
+        except KeyError as e:
+            return jsonify({"status": "error", "issue": f"No API key for {e.args[0]}"})
+        except Exception as e:
+            return jsonify({"status": "error", "issue": e})
+
         cur_topic = topic
     else:
         # Check which options need updating
@@ -246,7 +275,13 @@ def setup(topic):
 
         # Update embedding model, if needed
         if updates["embedding_choice"]:
-            embedding = load_embedding(vars)
+            try:
+                embedding = load_embedding(vars)
+            except KeyError as e:
+                return jsonify({"status": "error", "issue": f"No API key for {e.args[0]}"})
+            except Exception as e:
+                return jsonify({"status": "error", "issue": e})
+
             try:
                 db = load_database(vars, embedding)
             except Exception as e:
@@ -264,7 +299,12 @@ def setup(topic):
 
         # Update chat model, if needed
         if updates["model_choice"]:
-            model = load_model(vars)
+            try:
+                model = load_model(vars)
+            except KeyError as e:
+                return jsonify({"status": "error", "issue": f"No API key for {e.args[0]}"})
+            except Exception as e:
+                return jsonify({"status": "error", "issue": e})
     
     return jsonify({"status": "ok"})
 

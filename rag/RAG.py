@@ -378,6 +378,7 @@ def get_response(vars, db, model, user_query=None, user_history=None, chain_of_a
                     prompt_template = """
                     Create a summary of the following chunk of context information:
                     {context}
+                    Give a detailed summary.
                     """
                     prompt_template = ChatPromptTemplate.from_template(prompt_template)
                     prompt = prompt_template.format(context=chunk)
@@ -387,6 +388,7 @@ def get_response(vars, db, model, user_query=None, user_history=None, chain_of_a
                     {summary}
                     Using the above information, create a summary of the following chunk of context information:
                     {context}
+                    Give a detailed summary.
                     """
                     prompt_template = ChatPromptTemplate.from_template(prompt_template)
                     prompt = prompt_template.format(summary=cur_summary, context=chunk)
@@ -423,6 +425,7 @@ def get_response(vars, db, model, user_query=None, user_history=None, chain_of_a
         {context}
         Answer the question based on the above information: {question}
         Do not mention anything that is not contained in either the context information or the chat history.
+        Give a detailed response.
         """
 
         # Load history, context, and query into prompt
@@ -442,6 +445,7 @@ def get_response(vars, db, model, user_query=None, user_history=None, chain_of_a
                     prompt_template = """
                     Create a summary of the following chunk of context information:
                     {context}
+                    Give a detailed summary.
                     """
                     prompt_template = ChatPromptTemplate.from_template(prompt_template)
                     prompt = prompt_template.format(context=chunk)
@@ -451,6 +455,7 @@ def get_response(vars, db, model, user_query=None, user_history=None, chain_of_a
                     {summary}
                     Using the above information, create a summary of the following chunk of context information:
                     {context}
+                    Give a detailed summary.
                     """
                     prompt_template = ChatPromptTemplate.from_template(prompt_template)
                     prompt = prompt_template.format(summary=cur_summary, context=chunk)
@@ -485,6 +490,7 @@ def get_response(vars, db, model, user_query=None, user_history=None, chain_of_a
         {context}
         Answer the question based on the above context: {question}
         Do not mention any information which is not contained within the context.
+        Give a detailed response.
         """
 
         # Load context and query into prompt

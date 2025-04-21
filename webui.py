@@ -35,9 +35,11 @@ def context_to_server(cur_topic, files):
         return [gr.Files(), gr.Files()]
 
     for file in files:
-        cur_file = {'file': open(file, "rb")}
-        resp = requests.post(f"http://127.0.0.1:5000/upload/{cur_topic}", files=cur_file)
+        cur_file = open(file, "rb")
+        file_data = {'file': cur_file}
+        resp = requests.post(f"http://127.0.0.1:5000/upload/{cur_topic}", files=file_data)
         upload_resp = resp.json()
+        cur_file.close()
         if not upload_resp['status'] == "ok":
             file = upload_resp['file']
             raise gr.Error(f"Could not upload file {file}", duration=None)
@@ -68,12 +70,12 @@ def dl_all_server_context(cur_topic, files_list):
             os.mkdir("./saved_context")
             os.mkdir(f"./saved_context/{cur_topic}")
         except:
-            pass
+            raise gr.Error("Could not make save directories.", duration=None)
     elif not os.path.exists(f"./saved_context/{cur_topic}"):
         try:
             os.mkdir(f"./saved_context/{cur_topic}")
         except:
-            pass
+            raise gr.Error("Could not make topic save directory.", duration=None)
 
     for file in files_list:
         fname = os.path.basename(file)
@@ -128,8 +130,13 @@ def history_to_local(cur_topic, history, fname):
     elif not os.path.exists(f"./histories/{cur_topic}"):
         os.mkdir(f"./histories/{cur_topic}")
 
-    with open(f"./histories/{cur_topic}/{fname}.txt", "w", encoding="utf-8") as outf:
-        outf.write(str(history))
+    try:
+        with open(f"./histories/{cur_topic}/{fname}.txt", "w", encoding="utf-8") as outf:
+            outf.write(str(history))
+    except Exception as e:
+        raise gr.Error(e, duration=None)
+    
+    gr.Info("History saved")
 
 
 # Load local file to history
@@ -138,13 +145,13 @@ def local_to_history(history_file):
 
     history = []
     try:
-        with open(history_file, "r") as inf:
+        with open(history_file, "r", encoding="utf-8") as inf:
             history = inf.readlines()
             if history:
                 history = eval(history[0])
         history_uploaded = True
-    except:
-        pass
+    except Exception as e:
+        raise gr.Error(e, duration=None)
 
     return [gr.Chatbot(type="messages", value=history), gr.Chatbot(type="messages", value=history)]
 
@@ -196,7 +203,7 @@ def get_all_topics():
     ensure_customization()
 
     try:
-        with open("./customization/all_topics.txt") as inf:
+        with open("./customization/all_topics.txt", "r") as inf:
             all_topics = []
             for line in inf:
                 all_topics.append(line.strip())
@@ -319,17 +326,29 @@ def show_api_keys(cur_topic):
 def save_api_keys(cur_topic, api_keys):
     api_keys.to_csv("./temp_csv.csv", header=False, index=False)
 
-    cur_file = {"file": open("./temp_csv.csv", "rb")}
-    resp = requests.post(f"http://127.0.0.1:5000/save_api_keys/{cur_topic}", files=cur_file)
+    cur_file = open("./temp_csv.csv", "rb")
+    file_data = {"file": cur_file}
+    resp = requests.post(f"http://127.0.0.1:5000/save_api_keys/{cur_topic}", files=file_data)
     upload_resp = resp.json()
-    if not upload_resp["status"] == "ok":
+    if upload_resp["status"] == "error":
         raise gr.Error(upload_resp["issue"])
     
     try:
+        cur_file.close()
         os.remove("./temp_csv.csv")
-    except:
-        pass
+    except Exception as e:
+        raise gr.Error(e.args[0], duration=None)
     gr.Info("API Keys Saved")
+
+
+# Purge api keys
+def purge_api_keys(cur_topic):
+    resp = requests.post(f"http://127.0.0.1:5000/purge_api_keys/{cur_topic}")
+    del_resp = resp.json()
+    if del_resp["status"] == "error":
+        raise gr.Error(del_resp["issue"], duration=None)
+    
+    return gr.Dataframe(headers=["API", "Key"], value=None)
 
 
 # Update embedding options based on currently chosen type
@@ -604,7 +623,7 @@ def setup_layout(css, saved_color, theme, cur_layout):
                         chatbot=gr.Chatbot(
                             type="messages",
                             show_label=False,
-                            height=550,
+                            height=420,
                             avatar_images=(None, None),
                             placeholder="# Welcome to the experimental RAG system!",
                             layout=cur_layout
@@ -681,6 +700,10 @@ def setup_layout(css, saved_color, theme, cur_layout):
                             value="Save API Keys",
                             variant="primary"
                         )
+                        purge_keys = gr.Button(
+                            value="Purge API Keys",
+                            variant="stop"
+                        )
                     api_keys = gr.Dataframe(
                         headers=["API", "Key"],
                         show_label=False,
@@ -718,6 +741,7 @@ def setup_layout(css, saved_color, theme, cur_layout):
         # Handle API keys
         api_tab.select(show_api_keys, inputs=[cur_topic], outputs=[api_keys])
         save_keys.click(save_api_keys, inputs=[cur_topic, api_keys])
+        purge_keys.click(purge_api_keys, inputs=[cur_topic], outputs=[api_keys])
 
         # Handle topics
         cur_topic.change(save_current_topic, inputs=[cur_topic])
