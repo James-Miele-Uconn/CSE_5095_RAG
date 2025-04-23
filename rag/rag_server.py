@@ -314,13 +314,6 @@ def response(topic):
     local_model = vars["local_model"]
     model_choice = vars["model_choice"]
 
-    # Determine if all context directories are empty
-    context_roots = ["PDF_ROOT", "CSV_ROOT", "TXT_ROOT"]
-    has_context = [bool(os.listdir(roots[root])) for root in context_roots]
-    need_context = not any(has_context)
-    if need_context:
-        return jsonify({"response": "No context files have been provided, at least one is needed."})
-
     # Get variables from frontend
     try:
         user_query = request.form["user_query"]
@@ -331,14 +324,29 @@ def response(topic):
     except:
         user_history = None
     try:
+        no_context = eval(request.form["no_context"])
+    except:
+        no_context = None
+    try:
         chain_of_agents = eval(request.form["chain_of_agents"])
     except:
         chain_of_agents = None
 
+    # Determine if all context directories are empty when using RAG system
+    if not no_context:
+        context_roots = ["PDF_ROOT", "CSV_ROOT", "TXT_ROOT"]
+        has_context = [bool(os.listdir(roots[root])) for root in context_roots]
+        need_context = not any(has_context)
+        if need_context:
+            return jsonify({"response": "No context files have been provided, at least one is needed."})
+
     # Get response from RAG system
-    response_dict = get_response(vars, db, model, user_query=user_query, user_history=user_history, chain_of_agents=chain_of_agents)
+    try:
+        response_dict = get_response(vars, db, model, user_query, user_history, no_context, chain_of_agents)
+    except Exception as e:
+        return jsonify({"status": "error", "issue": e})
     response = response_dict["response"]
-    metadata = response_dict["metadata"]
+    context_text = response_dict["context_text"]
 
     # Format response
     if local_model:
@@ -349,7 +357,7 @@ def response(topic):
             think_end = response.find("</think>")
             response = response[(think_end + 8):]
 
-    return jsonify({"response": response, "metadata": metadata})
+    return jsonify({"status": "ok", "response": response, "context_text": context_text})
 
 if __name__ == "__main__":
     app.run()

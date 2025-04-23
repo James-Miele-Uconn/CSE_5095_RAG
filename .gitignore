@@ -14,6 +14,15 @@ customization/theme_color.txt
 customization/chat_layout.txt
 customization/all_topics.txt
 customization/current_topic.txt
+customization/user_icons/
+!customization/user_icons/default.png
+customization/chatbot_icons/
+!customization/chatbot_icons/default.png
+customization/avatar_fill.txt
+customization/avatar_shape.txt
+customization/avatar_size.txt
+customization/chatbot_icon.txt
+customization/user_icon.txt
 
 # Exclude webui folders
 histories/

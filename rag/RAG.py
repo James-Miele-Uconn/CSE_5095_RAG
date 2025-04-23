@@ -344,7 +344,7 @@ def load_models_and_db(vars):
     return (db, model)
 
 
-def get_response(vars, db, model, user_query=None, user_history=None, chain_of_agents=False):
+def get_response(vars, db, model, user_query=None, user_history=None, no_context=None, chain_of_agents=False):
     """Given input and some desired response type, create a prompt and receive a response.
 
     Args:
@@ -353,6 +353,7 @@ def get_response(vars, db, model, user_query=None, user_history=None, chain_of_a
       model: Chat model to use.
       user_query: The query to give to the chat model. Defaults to None.
       user_history: The history to give to the chat model. Defaults to False.
+      no_context: Whether the RAG system should be used. Defaults to None.
       chain_of_agents: Whether to use a chain of agents to summarize context.
     
     Returns:
@@ -365,137 +366,159 @@ def get_response(vars, db, model, user_query=None, user_history=None, chain_of_a
 
     context_text = None
     if (user_query is not None) and (user_history is not None):
-        # Get context information
-        cur_chunks = db.similarity_search_with_score(user_query, k=args.num_docs)
-        context_chunks = [chunk.page_content for chunk, _score in cur_chunks]
+        if no_context:
+            # Set up prompt template
+            prompt_template = """
+            The following is a summary of the chat history so far:
+            {history}
+            Respond to the following message, using the above information as needed: {message}
+            """
 
-        # Create context text
-        if chain_of_agents:
-            cur_summary = None
-            for chunk in context_chunks:
-                # Create prompt
-                if cur_summary is None:
-                    prompt_template = """
-                    Create a summary of the following chunk of context information:
-                    {context}
-                    Give a detailed summary.
-                    """
-                    prompt_template = ChatPromptTemplate.from_template(prompt_template)
-                    prompt = prompt_template.format(context=chunk)
-                else:
-                    prompt_template = """
-                    Below is a summary of the previous context information used:
-                    {summary}
-                    Using the above information, create a summary of the following chunk of context information:
-                    {context}
-                    Give a detailed summary.
-                    """
-                    prompt_template = ChatPromptTemplate.from_template(prompt_template)
-                    prompt = prompt_template.format(summary=cur_summary, context=chunk)
+            # Load history and message into prompt
+            prompt_template = ChatPromptTemplate.from_template(prompt_template)
+            prompt = prompt_template.format(history=user_history, message=user_query)
+        else:
+            # Get context information
+            cur_chunks = db.similarity_search_with_score(user_query, k=args.num_docs)
+            context_chunks = [chunk.page_content for chunk, _score in cur_chunks]
 
-                # Get response
-                if (model_choice == "openai"):
-                    response = model.invoke(prompt)
-                else:
-                    if (model_choice in models_dict["local"]):
+            # Create context text
+            if chain_of_agents:
+                cur_summary = None
+                for chunk in context_chunks:
+                    # Create prompt
+                    if cur_summary is None:
+                        prompt_template = """
+                        Create a summary of the following chunk of context information:
+                        {context}
+                        Give a detailed summary.
+                        """
+                        prompt_template = ChatPromptTemplate.from_template(prompt_template)
+                        prompt = prompt_template.format(context=chunk)
+                    else:
+                        prompt_template = """
+                        Below is a summary of the previous context information used:
+                        {summary}
+                        Using the above information, create a summary of the following chunk of context information:
+                        {context}
+                        Give a detailed summary.
+                        """
+                        prompt_template = ChatPromptTemplate.from_template(prompt_template)
+                        prompt = prompt_template.format(summary=cur_summary, context=chunk)
+
+                    # Get response
+                    if (model_choice == "openai"):
                         response = model.invoke(prompt)
                     else:
-                        response = model.invoke(prompt)
-                response = response.content
+                        if (model_choice in models_dict["local"]):
+                            response = model.invoke(prompt)
+                        else:
+                            response = model.invoke(prompt)
+                    response = response.content
 
-                # Format response
-                if (model_choice == "Mistral-7B-Instruct-v0.3"):
-                    prompt_end = response.find("[/INST]")
-                    response = response[(prompt_end + 7):]
-                elif ("deepseek-r1" in model_choice):
-                    think_end = response.find("</think>")
-                    response = response[(think_end + 8):]
-                cur_summary = response
+                    # Format response
+                    if (model_choice == "Mistral-7B-Instruct-v0.3"):
+                        prompt_end = response.find("[/INST]")
+                        response = response[(prompt_end + 7):]
+                    elif ("deepseek-r1" in model_choice):
+                        think_end = response.find("</think>")
+                        response = response[(think_end + 8):]
+                    cur_summary = response
 
-            chunk_text = "\n\n".join(context_chunks)
-            context_text = f"Summary:\n{cur_summary}\n\nChunks:\n{chunk_text}"
-        else:
-            context_text = "\n\n".join(context_chunks)
+                chunk_text = "\n\n".join(context_chunks)
+                context_text = f"Summary:\n{cur_summary}\n\nChunks:\n{chunk_text}"
+            else:
+                context_text = "\n\n".join(context_chunks)
 
-        # Set up prompt
-        prompt_template = """
-        The following is a summary of the chat history so far:
-        {history}
-        Using the information above and the following context information, answer the question:
-        {context}
-        Answer the question based on the above information: {question}
-        Do not mention anything that is not contained in either the context information or the chat history.
-        Give a detailed response.
-        """
+            # Set up prompt
+            prompt_template = """
+            The following is a summary of the chat history so far:
+            {history}
+            Using the information above and the following context information, answer the question:
+            {context}
+            Answer the question based on the above information: {question}
+            Do not mention anything that is not contained in either the context information or the chat history.
+            Give a detailed response.
+            """
 
-        # Load history, context, and query into prompt
-        prompt_template = ChatPromptTemplate.from_template(prompt_template)
-        prompt = prompt_template.format(history=user_history, context=context_text, question=user_query)
+            # Load history, context, and query into prompt
+            prompt_template = ChatPromptTemplate.from_template(prompt_template)
+            prompt = prompt_template.format(history=user_history, context=context_text, question=user_query)
     elif user_query is not None:
-        # Get context information
-        cur_chunks = db.similarity_search_with_score(user_query, k=args.num_docs)
-        context_chunks = [chunk.page_content for chunk, _score in cur_chunks]
+        if no_context:
+            # Set up prompt template
+            prompt_template = """
+            {message}
+            """
 
-        # Create context text
-        if chain_of_agents:
-            cur_summary = None
-            for chunk in context_chunks:
-                # Create prompt
-                if cur_summary is None:
-                    prompt_template = """
-                    Create a summary of the following chunk of context information:
-                    {context}
-                    Give a detailed summary.
-                    """
-                    prompt_template = ChatPromptTemplate.from_template(prompt_template)
-                    prompt = prompt_template.format(context=chunk)
-                else:
-                    prompt_template = """
-                    Below is a summary of the previous context information used:
-                    {summary}
-                    Using the above information, create a summary of the following chunk of context information:
-                    {context}
-                    Give a detailed summary.
-                    """
-                    prompt_template = ChatPromptTemplate.from_template(prompt_template)
-                    prompt = prompt_template.format(summary=cur_summary, context=chunk)
+            # Load history and message into prompt
+            prompt_template = ChatPromptTemplate.from_template(prompt_template)
+            prompt = prompt_template.format(message=user_query)
+        else:
+            # Get context information
+            cur_chunks = db.similarity_search_with_score(user_query, k=args.num_docs)
+            context_chunks = [chunk.page_content for chunk, _score in cur_chunks]
 
-                # Get response
-                if (model_choice == "openai"):
-                    response = model.invoke(prompt)
-                else:
-                    if (model_choice in models_dict["local"]):
+            # Create context text
+            if chain_of_agents:
+                cur_summary = None
+                for chunk in context_chunks:
+                    # Create prompt
+                    if cur_summary is None:
+                        prompt_template = """
+                        Create a summary of the following chunk of context information:
+                        {context}
+                        Give a detailed summary.
+                        """
+                        prompt_template = ChatPromptTemplate.from_template(prompt_template)
+                        prompt = prompt_template.format(context=chunk)
+                    else:
+                        prompt_template = """
+                        Below is a summary of the previous context information used:
+                        {summary}
+                        Using the above information, create a summary of the following chunk of context information:
+                        {context}
+                        Give a detailed summary.
+                        """
+                        prompt_template = ChatPromptTemplate.from_template(prompt_template)
+                        prompt = prompt_template.format(summary=cur_summary, context=chunk)
+
+                    # Get response
+                    if (model_choice == "openai"):
                         response = model.invoke(prompt)
                     else:
-                        response = model.invoke(prompt)
-                response = response.content
+                        if (model_choice in models_dict["local"]):
+                            response = model.invoke(prompt)
+                        else:
+                            response = model.invoke(prompt)
+                    response = response.content
 
-                # Format response
-                if (model_choice == "Mistral-7B-Instruct-v0.3"):
-                    prompt_end = response.find("[/INST]")
-                    response = response[(prompt_end + 7):]
-                elif ("deepseek-r1" in model_choice):
-                    think_end = response.find("</think>")
-                    response = response[(think_end + 8):]
-                cur_summary = response
+                    # Format response
+                    if (model_choice == "Mistral-7B-Instruct-v0.3"):
+                        prompt_end = response.find("[/INST]")
+                        response = response[(prompt_end + 7):]
+                    elif ("deepseek-r1" in model_choice):
+                        think_end = response.find("</think>")
+                        response = response[(think_end + 8):]
+                    cur_summary = response
 
-            chunk_text = "\n\n".join(context_chunks)
-            context_text = f"Summary:\n{cur_summary}\n\nChunks:\n{chunk_text}"
-        else:
-            context_text = "\n\n".join(context_chunks)
+                chunk_text = "\n\n".join(context_chunks)
+                context_text = f"Summary:\n{cur_summary}\n\nChunks:\n{chunk_text}"
+            else:
+                context_text = "\n\n".join(context_chunks)
 
-        # Set up prompt
-        prompt_template = """
-        Answer the question based only on the following context:
-        {context}
-        Answer the question based on the above context: {question}
-        Do not mention any information which is not contained within the context.
-        Give a detailed response.
-        """
+            # Set up prompt
+            prompt_template = """
+            Answer the question based only on the following context:
+            {context}
+            Answer the question based on the above context: {question}
+            Do not mention any information which is not contained within the context.
+            Give a detailed response.
+            """
 
-        # Load context and query into prompt
-        prompt_template = ChatPromptTemplate.from_template(prompt_template)
-        prompt = prompt_template.format(context=context_text, question=user_query)
+            # Load context and query into prompt
+            prompt_template = ChatPromptTemplate.from_template(prompt_template)
+            prompt = prompt_template.format(context=context_text, question=user_query)
     elif user_history is not None:
         # Set up prompt
         prompt_template = """
@@ -507,21 +530,21 @@ def get_response(vars, db, model, user_query=None, user_history=None, chain_of_a
         prompt_template = ChatPromptTemplate.from_template(prompt_template)
         prompt = prompt_template.format(history=user_history)
     else:
-        return "This action requires either a query or a chat history."
+        raise Exception("This action requires either a query or a chat history.")
 
-    # Get answer from LLM
-    if (model_choice == "openai"):
-        response = model.invoke(prompt)
-    else:
-        if (model_choice in models_dict["local"]):
+    try:
+        # Get answer from LLM
+        if (model_choice == "openai"):
             response = model.invoke(prompt)
         else:
-            response = model.invoke(prompt)
+            if (model_choice in models_dict["local"]):
+                response = model.invoke(prompt)
+            else:
+                response = model.invoke(prompt)
+    except Exception as e:
+        raise Exception(e)
     
     if not isinstance(response, str):
         response = response.content
     
-    metadata = None
-    if context_text is not None:
-        metadata = context_text
-    return {"response": response, "metadata": metadata}
+    return {"response": response, "context_text": context_text}

@@ -12,6 +12,7 @@ need_restart = False
 history_uploaded = False
 context_changed = False
 
+
 # Options lists for each type of embedding model
 embeddings_dict = {
     "ollama": ["mxbai-embed-large", "nomic-embed-text"],
@@ -173,10 +174,78 @@ def ensure_customization():
 
 # Update theme color
 def update_theme_color(cur_color):
-    ensure_customization()
-
     with open("./customization/theme_color.txt", "w", encoding="utf-8") as outf:
         outf.write(cur_color)
+
+
+# Update theme color
+def update_avatar_size(cur_size):
+    with open("./customization/avatar_size.txt", "w", encoding="utf-8") as outf:
+        outf.write(cur_size)
+
+
+# Update theme color
+def update_avatar_shape(cur_shape):
+    with open("./customization/avatar_shape.txt", "w", encoding="utf-8") as outf:
+        outf.write(cur_shape)
+
+
+# Update theme color
+def update_avatar_fill(cur_fill):
+    with open("./customization/avatar_fill.txt", "w", encoding="utf-8") as outf:
+        outf.write(cur_fill)
+
+
+# Add new user icons
+def add_user_icons(cur_icons):
+    for icon in cur_icons:
+        fname = os.path.basename(icon)
+        copy(icon, f"./customization/user_icons/{fname}")
+
+    new_user_icon_opts = get_user_icon_opts()
+
+    return [gr.Files(value=None), gr.Dropdown(new_user_icon_opts)]
+
+
+# Remove all but default user icons
+def purge_user_icons():
+    for icon in os.listdir("./customization/user_icons"):
+        fname = os.path.basename(icon)
+        if fname != "default.png":
+            try:
+                os.remove(f"./customization/user_icons/{icon}")
+            except Exception as e:
+                raise gr.Error(e, duration=None)
+    
+    new_user_icon_opts = get_user_icon_opts()
+
+    return gr.Dropdown(new_user_icon_opts, value=new_user_icon_opts[0])
+
+
+# Add new chatbot icons
+def add_chatbot_icons(cur_icons):
+    for icon in cur_icons:
+        fname = os.path.basename(icon)
+        copy(icon, f"./customization/chatbot_icons/{fname}")
+
+    new_chatbot_icon_opts = get_chatbot_icon_opts()
+
+    return [gr.Files(value=None), gr.Dropdown(new_chatbot_icon_opts)]
+
+
+# Remove all but default chatbot icons
+def purge_chatbot_icons():
+    for icon in os.listdir("./customization/chatbot_icons"):
+        fname = os.path.basename(icon)
+        if fname != "default.png":
+            try:
+                os.remove(f"./customization/chatbot_icons/{icon}")
+            except Exception as e:
+                raise gr.Error(e, duration=None)
+    
+    new_chatbot_icon_opts = get_chatbot_icon_opts()
+
+    return gr.Dropdown(new_chatbot_icon_opts, value=new_chatbot_icon_opts[0])
 
 
 # Javascript needed for changing theme mode
@@ -190,12 +259,72 @@ def theme_mode_js():
 
 # Update chat layout
 def update_chat_layout(cur_layout):
-    ensure_customization()
-
     with open("./customization/chat_layout.txt", "w", encoding="utf-8") as outf:
         outf.write(cur_layout)
     
     return gr.Chatbot(type="messages", layout=cur_layout)
+
+
+# Get all user icon options
+def get_user_icon_opts():
+    user_icons = []
+    for file in os.listdir("./customization/user_icons"):
+        user_icons.append(file)
+    
+    return user_icons
+
+
+# Get saved user icon name
+def get_saved_user_icon():
+    saved_user_icon = "default.png"
+    try:
+        with open("./customization/user_icon.txt", "r", encoding="utf-8") as inf:
+            saved_user_icon = inf.readline().strip()
+    except:
+        pass
+
+    return saved_user_icon
+
+
+# Get all chatbot icon options
+def get_chatbot_icon_opts():
+    chatbot_icons = []
+    for file in os.listdir("./customization/chatbot_icons"):
+        chatbot_icons.append(file)
+    
+    return chatbot_icons
+
+
+# Get saved chatbot icon name
+def get_saved_chatbot_icon():
+    saved_chatbot_icon = "default.png"
+    try:
+        with open("./customization/chatbot_icon.txt", "r", encoding="utf-8") as inf:
+            saved_chatbot_icon = inf.readline().strip()
+    except:
+        pass
+
+    return saved_chatbot_icon
+
+
+# Save user icon choice
+def update_user_ai_icons(user_icon_file, chatbot_icon_file):
+    with open("./customization/user_icon.txt", "w", encoding="utf-8") as outf:
+        outf.write(user_icon_file)
+    
+    with open("./customization/chatbot_icon.txt", "w", encoding="utf-8") as outf:
+        outf.write(chatbot_icon_file)
+    
+    user_icon_path = f"./customization/user_icons/{user_icon_file}"
+    chatbot_icon_path = f"./customization/chatbot_icons/{chatbot_icon_file}"
+
+    output = [
+        gr.Chatbot(type="messages", avatar_images=(user_icon_path, chatbot_icon_path)),
+        gr.Image(value=user_icon_path),
+        gr.Image(value=chatbot_icon_path)
+    ]
+
+    return output
 
 
 # Get all topics
@@ -358,6 +487,16 @@ def update_embedding_opts(embedding_type):
     return gr.Dropdown(new_opts, value=new_opts[0])
 
 
+# Update context options
+def update_context_opts(no_context):
+    if no_context:
+        new_opts = [gr.Slider(visible=False), gr.Checkbox(visible=False)]
+    else:
+        new_opts = [gr.Slider(visible=True), gr.Checkbox(visible=True)]
+    
+    return new_opts
+
+
 # Update model options based on currently chosen type
 def update_chat_opts(model_type):
     global models_dict
@@ -380,7 +519,7 @@ def chunk_opt_defaults():
 
 
 # Main chat function
-def run_rag(message, history, cur_topic, use_history, chain_of_agents, embedding_choice, model_choice, num_docs, chunk_size, chunk_overlap, refresh_db, uploaded_history):
+def run_rag(message, history, cur_topic, use_history, embedding_choice, model_choice, no_context, num_docs, chain_of_agents, chunk_size, chunk_overlap, refresh_db, uploaded_history):
     """Ensure the RAG system uses the desired setup, then request an answer from the system.
 
     Args:
@@ -388,10 +527,11 @@ def run_rag(message, history, cur_topic, use_history, chain_of_agents, embedding
       history: OpenAI style of conversation history for this session.
       cur_topic: Which topic directory to use
       use_history: Whether to use summary of chat history in query response.
-      chain_of_agents: Whether to use a chain of agents to summarize context.
       embedding_choice: Currently chosen embedding model to use.
       model_choice: Currently chosen chat model to use.
+      no_context: Whether the RAG system should be used.
       num_docs: Number of chunks to use when creating an answer.
+      chain_of_agents: Whether to use a chain of agents to summarize context.
       chunk_size: Size of chunks to use for database chunks.
       chunk_overlap: Amount of overlap to use for database chunks.
       refresh_db: Whether the database should be forcibly refreshed.
@@ -431,27 +571,34 @@ def run_rag(message, history, cur_topic, use_history, chain_of_agents, embedding
         # Summarize history
         hist_info = {"user_history": history}
         resp = requests.post(f"http://127.0.0.1:5000/response/{cur_topic}", data=hist_info)
-        hist_summary = resp.json()['response']
+        hist_resp = resp.json()
+        if hist_resp["status"] == "error":
+            return hist_resp["issue"]
+        hist_summary = hist_resp["response"]
 
         # Send query and history summary
-        resp_info = {"user_query": message, "user_history": hist_summary, "chain_of_agents": chain_of_agents}
+        resp_info = {"user_query": message, "user_history": hist_summary, "no_context": no_context, "chain_of_agents": chain_of_agents}
         resp = requests.post(f"http://127.0.0.1:5000/response/{cur_topic}", data=resp_info)
         response_dict = resp.json()
+        if response_dict["status"] == "error":
+            return response_dict["issue"]
         response = response_dict["response"]
-        metadata = response_dict["metadata"]
+        context_text = response_dict["context_text"]
     else:
         # Send query to RAG system
-        resp_info = {"user_query": message, "chain_of_agents": chain_of_agents}
+        resp_info = {"user_query": message, "no_context": no_context, "chain_of_agents": chain_of_agents}
         resp = requests.post(f"http://127.0.0.1:5000/response/{cur_topic}", data=resp_info)
         response_dict = resp.json()
+        if response_dict["status"] == "error":
+            return response_dict["issue"]
         response = response_dict["response"]
-        metadata = response_dict["metadata"]
+        context_text = response_dict["context_text"]
 
     output = []
-    if metadata is not None:
-        metadata_info = {"title": "Context", "status": "done"}
-        output.append({"role": "assistant", "metadata": metadata_info, "content": metadata, "options": None})
     output.append({"role": "assistant", "metadata": None, "content": response, "options": None})
+    if context_text is not None:
+        context_meta_info = {"title": "Context", "status": "done"}
+        output.append({"role": "assistant", "metadata": context_meta_info, "content": context_text, "options": None})
 
     return output
 
@@ -461,12 +608,75 @@ def get_setup_vars():
     """Create variables to pass to UI Block object.
 
     Returns:
-      CSS, color option, theme object, and chat layout to give to UI Block object.
+      CSS, color option, theme object, chat layout, and saved css options to give to UI Block object.
     """
     # Add custom css
     css = """
     footer {visibility: hidden}
     """
+
+    saved_avatar_size = "Small"
+    try:
+        with open("./customization/avatar_size.txt", "r", encoding="utf-8") as inf:
+            saved_avatar_size = inf.readline().strip()
+    except:
+        pass
+    saved_avatar_shape = "Circle"
+    try:
+        with open("./customization/avatar_shape.txt", "r", encoding="utf-8") as inf:
+            saved_avatar_shape = inf.readline().strip()
+    except:
+        pass
+    saved_avatar_fill = "Cover"
+    try:
+        with open("./customization/avatar_fill.txt", "r", encoding="utf-8") as inf:
+            saved_avatar_fill = inf.readline().strip()
+    except:
+        pass
+
+    sizes = {"small": 35, "medium": 75, "large": 115}
+
+    cur_fill = saved_avatar_fill.lower()
+    cur_shape = saved_avatar_shape.lower()
+    cur_size = saved_avatar_size.lower()
+    cur_base_size = sizes[cur_size]
+
+    if cur_shape == "portrait":
+        cur_width = cur_base_size
+        cur_height = (cur_base_size + 30)
+    elif cur_shape == "landscape":
+        cur_width = (cur_base_size + 30)
+        cur_height = cur_base_size
+    else:
+        cur_width = cur_base_size
+        cur_height = cur_base_size
+    if cur_shape == "circle":
+        cur_border = "50%"
+    else:
+        cur_border = "10px"
+
+    css += "\n.avatar-container {\n"
+    css += f"    width: {cur_width}px !important;\n"
+    css += f"    height: {cur_height}px !important;\n"
+    css += f"    border-radius: {cur_border} !important;\n"
+    css += "    padding: 0px !important;\n"
+    css += "    flex-shrink: 0 !important;\n"
+    css += "    bottom: 0 !important;\n"
+    css += "    border: 1px solid var(--border-color-primary) !important;\n"
+    css += "    overflow: hidden !important;\n"
+    css += "}\n"
+
+    css += "\n.avatar-image {\n"
+    css += f"    width: {cur_width}px !important;\n"
+    css += f"    height: {cur_height}px !important;\n"
+    css += f"    border-radius: {cur_border} !important;\n"
+    css += f"    object-fit: {cur_fill};\n"
+    css += "    padding: 0px !important;\n"
+    css += "    flex-shrink: 0 !important;\n"
+    css += "    bottom: 0 !important;\n"
+    css += "    border: 1px solid var(--border-color-primary) !important;\n"
+    css += "    overflow: hidden !important;\n"
+    css += "}\n"
 
     # Get currently set theme color
     saved_color = "rose"
@@ -497,11 +707,11 @@ def get_setup_vars():
     except:
         pass
 
-    return (css, saved_color, theme, cur_layout)
+    return (css, saved_color, theme, cur_layout, saved_avatar_size, saved_avatar_shape, saved_avatar_fill)
 
 
 # Layout for the UI
-def setup_layout(css, saved_color, theme, cur_layout):
+def setup_layout(css, saved_color, theme, cur_layout, saved_avatar_size, saved_avatar_shape, saved_avatar_fill):
     """Create Block object to be used for UI.
 
     Args:
@@ -509,11 +719,16 @@ def setup_layout(css, saved_color, theme, cur_layout):
       saved_color: String naming the saved color.
       theme: Customized Default theme.
       cur_layout: String naming which layout to use for the chatbot.
+      saved_avatar_size: String naming the saved avatar size.
+      saved_avatar_shape: String naming the saved avatar shape.
+      saved_avatar_fill: String naming the saved avatar fill.
     
     Returns:
       The Block object to be used for the UI.
     """
     ensure_customization()
+    saved_user_icon = get_saved_user_icon()
+    saved_chatbot_icon = get_saved_chatbot_icon()
     with gr.Blocks(title="RAG System", theme=theme, css=css) as app:
         # Settings
         with gr.Row():
@@ -556,16 +771,22 @@ def setup_layout(css, saved_color, theme, cur_layout):
 
                 # Various other common options
                 with gr.Column():
+                    use_history = gr.Checkbox(
+                        label="Add summary of chat history to prompt",
+                        value=False
+                    )
+                    no_context = gr.Checkbox(
+                        value=False,
+                        label="Do not use RAG system",
+                        show_label=False
+                    )
                     num_docs = gr.Slider(
                         1,
                         30,
                         value=5,
                         step=1,
-                        label="Number of chunks to use when answering query"
-                    )
-                    use_history = gr.Checkbox(
-                        label="Add summary of chat history to query",
-                        value=False
+                        label="Number of chunks to use when answering query",
+                        visible=True
                     )
                     chain_of_agents = gr.Checkbox(
                         label="Use Chain of Agents to summarize each chunk",
@@ -627,6 +848,7 @@ def setup_layout(css, saved_color, theme, cur_layout):
 
                     # Chat interface
                     # Chatbox and Textbox specified to allow customization
+                    initial_avatar_images = (f"./customization/user_icons/{saved_user_icon}", f"./customization/chatbot_icons/{saved_chatbot_icon}")
                     main_chat = gr.ChatInterface(
                         run_rag,
                         type="messages",
@@ -634,7 +856,7 @@ def setup_layout(css, saved_color, theme, cur_layout):
                             type="messages",
                             show_label=False,
                             height=420,
-                            avatar_images=(None, None),
+                            avatar_images=initial_avatar_images,
                             placeholder="# Welcome to the experimental RAG system!",
                             layout=cur_layout
                         ),
@@ -646,10 +868,11 @@ def setup_layout(css, saved_color, theme, cur_layout):
                         additional_inputs=[
                             cur_topic,
                             use_history,
-                            chain_of_agents,
                             embedding_choice,
                             model_choice,
+                            no_context,
                             num_docs,
+                            chain_of_agents,
                             chunk_size,
                             chunk_overlap,
                             refresh_db,
@@ -721,7 +944,65 @@ def setup_layout(css, saved_color, theme, cur_layout):
                     )
 
         # Customization options
-        with gr.Sidebar(width=200, open=False, position="right"):
+        with gr.Sidebar(width=300, open=False, position="right"):
+            # User icon settings
+            with gr.Group():
+                user_icon_opts = get_user_icon_opts()
+                user_icon_file = gr.Dropdown(
+                    user_icon_opts,
+                    value=saved_user_icon,
+                    label="User Icon"
+                )
+                user_icon_preview = gr.Image(
+                    value=f"./customization/user_icons/{saved_user_icon}",
+                    image_mode=None,
+                    type="filepath",
+                    show_download_button=False,
+                    show_share_button=False,
+                    show_label=False,
+                    interactive=False
+                )
+                new_user_icons = gr.Files(
+                    show_label=False,
+                    height=65
+                )
+                upload_user_icons = gr.Button(
+                    value="Upload New User Avatar"
+                )
+                delete_user_icons = gr.Button(
+                    value="Delete All User Avatars (Except Default)",
+                    variant="stop"
+                )
+
+            # Chatbot icon settings
+            with gr.Group():
+                chatbot_icon_opts = get_chatbot_icon_opts()
+                chatbot_icon_file = gr.Dropdown(
+                    chatbot_icon_opts,
+                    value=saved_chatbot_icon,
+                    label="Chatbot Icon"
+                )
+                chatbot_icon_preview = gr.Image(
+                    value=f"./customization/chatbot_icons/{saved_chatbot_icon}",
+                    image_mode=None,
+                    type="filepath",
+                    show_download_button=False,
+                    show_share_button=False,
+                    show_label=False,
+                    interactive=False
+                )
+                new_chatbot_icons = gr.Files(
+                    show_label=False,
+                    height=65
+                )
+                upload_chatbot_icons = gr.Button(
+                    value="Upload New Chatbot Avatar"
+                )
+                delete_chatbot_icons = gr.Button(
+                    value="Delete All Chatbot Avatars (Except Default)",
+                    variant="stop"
+                )
+
             # Settings that don't need a restart
             with gr.Column():
                 chat_layout = gr.Radio(
@@ -741,7 +1022,21 @@ def setup_layout(css, saved_color, theme, cur_layout):
                     ["slate", "gray", "zinc", "neutral", "stone", "red", "orange", "amber", "yellow", "lime", "green", "emerald", "teal", "cyan", "sky", "blue", "indigo", "violet", "purple", "fuchsia", "pink", "rose"],
                     value=saved_color,
                     label="Theme Color",
-                    interactive=True
+                )
+                avatar_size = gr.Dropdown(
+                    ["Small", "Medium", "Large"],
+                    value=saved_avatar_size,
+                    label="Avatar Size"
+                )
+                avatar_shape = gr.Dropdown(
+                    ["Circle", "Square", "Portrait", "Landscape"],
+                    value=saved_avatar_shape,
+                    label="Avatar Shape"
+                )
+                avatar_fill = gr.Dropdown(
+                    ["Cover", "Contain", "Fill"],
+                    value=saved_avatar_fill,
+                    label="Avatar Fill"
                 )
                 reload_app = gr.Button(
                     value="Reload UI\n(Requires refreshing tab)",
@@ -771,15 +1066,25 @@ def setup_layout(css, saved_color, theme, cur_layout):
 
         # Handle general options
         embedding_type.change(update_embedding_opts, inputs=[embedding_type], outputs=[embedding_choice])
-        model_type.change(update_chat_opts, inputs=[model_type], outputs=model_choice)
+        model_type.change(update_chat_opts, inputs=[model_type], outputs=[model_choice])
+        no_context.change(update_context_opts, inputs=[no_context], outputs=[num_docs, chain_of_agents])
         refresh_db.change(show_chunk_opts, inputs=[refresh_db], outputs=[chunk_size, chunk_overlap, reset_chunk_opts])
         reset_chunk_opts.click(chunk_opt_defaults, outputs=[chunk_size, chunk_overlap])
 
         # Handle customization options
+        upload_user_icons.click(add_user_icons, inputs=[new_user_icons], outputs=[new_user_icons, user_icon_file])
+        delete_user_icons.click(purge_user_icons, outputs=[user_icon_file])        
+        upload_chatbot_icons.click(add_chatbot_icons, inputs=[new_chatbot_icons], outputs=[new_chatbot_icons, chatbot_icon_file])
+        delete_chatbot_icons.click(purge_chatbot_icons, outputs=[chatbot_icon_file])        
+        user_icon_file.change(update_user_ai_icons, inputs=[user_icon_file, chatbot_icon_file], outputs=[main_chat.chatbot, user_icon_preview, chatbot_icon_preview])
+        chatbot_icon_file.change(update_user_ai_icons, inputs=[user_icon_file, chatbot_icon_file], outputs=[main_chat.chatbot, user_icon_preview, chatbot_icon_preview])
         chat_layout.change(update_chat_layout, inputs=[chat_layout], outputs=[main_chat.chatbot])
         mode_js = theme_mode_js()
         theme_mode.click(None, js=mode_js)
         theme_color.change(update_theme_color, inputs=[theme_color])
+        avatar_size.change(update_avatar_size, inputs=[avatar_size])
+        avatar_shape.change(update_avatar_shape, inputs=[avatar_shape])
+        avatar_fill.change(update_avatar_fill, inputs=[avatar_fill])
         reload_app.click(update_reload)
 
     return app
@@ -789,8 +1094,8 @@ def setup_layout(css, saved_color, theme, cur_layout):
 if __name__ == "__main__":
     while True:
         # Launch UI with customization settings
-        css, saved_color, theme, cur_layout = get_setup_vars()
-        app = setup_layout(css, saved_color, theme, cur_layout)
+        css, saved_color, theme, cur_layout, saved_avatar_size, saved_avatar_shape, saved_avatar_fill = get_setup_vars()
+        app = setup_layout(css, saved_color, theme, cur_layout, saved_avatar_size, saved_avatar_shape, saved_avatar_fill)
         app.launch(
             favicon_path="./customization/favicon.png",
             share=False,
