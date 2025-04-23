@@ -214,17 +214,13 @@ def setup(topic):
     num_docs = int(request.form["num_docs"])
     chunk_size = int(request.form["chunk_size"])
     chunk_overlap = int(request.form["chunk_overlap"])
-    refresh_db = request.form["refresh_db"]
+    refresh_db = eval(request.form["refresh_db"])
 
     # Ensure variables are expected values
     if chunk_size < 1:
         chunk_size = 1
     if chunk_overlap < 0:
         chunk_overlap = 0
-    if refresh_db.lower() == "true":
-        refresh_db = True
-    else:
-        refresh_db = False
 
     # Check if initial setup should happen
     if (vars is None) or (embedding is None) or (db is None) or (model is None):
@@ -335,16 +331,16 @@ def response(topic):
     except:
         user_history = None
     try:
-        chain_of_agents = request.form["chain_of_agents"]
+        chain_of_agents = eval(request.form["chain_of_agents"])
     except:
         chain_of_agents = None
 
     # Get response from RAG system
-    response = get_response(vars, db, model, user_query=user_query, user_history=user_history, chain_of_agents=chain_of_agents)
+    response_dict = get_response(vars, db, model, user_query=user_query, user_history=user_history, chain_of_agents=chain_of_agents)
+    response = response_dict["response"]
+    metadata = response_dict["metadata"]
 
     # Format response
-    if not isinstance(response, str):
-        response = response.content
     if local_model:
         if (model_choice == "Mistral-7B-Instruct-v0.3"):
             prompt_end = response.find("[/INST]")
@@ -353,7 +349,7 @@ def response(topic):
             think_end = response.find("</think>")
             response = response[(think_end + 8):]
 
-    return jsonify({"response": response})
+    return jsonify({"response": response, "metadata": metadata})
 
 if __name__ == "__main__":
     app.run()

@@ -436,14 +436,24 @@ def run_rag(message, history, cur_topic, use_history, chain_of_agents, embedding
         # Send query and history summary
         resp_info = {"user_query": message, "user_history": hist_summary, "chain_of_agents": chain_of_agents}
         resp = requests.post(f"http://127.0.0.1:5000/response/{cur_topic}", data=resp_info)
-        response = resp.json()['response']
+        response_dict = resp.json()
+        response = response_dict["response"]
+        metadata = response_dict["metadata"]
     else:
         # Send query to RAG system
         resp_info = {"user_query": message, "chain_of_agents": chain_of_agents}
         resp = requests.post(f"http://127.0.0.1:5000/response/{cur_topic}", data=resp_info)
-        response = resp.json()['response']
+        response_dict = resp.json()
+        response = response_dict["response"]
+        metadata = response_dict["metadata"]
 
-    return response
+    output = []
+    if metadata is not None:
+        metadata_info = {"title": "Context", "status": "done"}
+        output.append({"role": "assistant", "metadata": metadata_info, "content": metadata, "options": None})
+    output.append({"role": "assistant", "metadata": None, "content": response, "options": None})
+
+    return output
 
 
 # Get customization options, to allow storing/reloading UI theme

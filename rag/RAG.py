@@ -344,7 +344,7 @@ def load_models_and_db(vars):
     return (db, model)
 
 
-def get_response(vars, db, model, user_query=None, user_history=None, chain_of_agents=None):
+def get_response(vars, db, model, user_query=None, user_history=None, chain_of_agents=False):
     """Given input and some desired response type, create a prompt and receive a response.
 
     Args:
@@ -352,7 +352,7 @@ def get_response(vars, db, model, user_query=None, user_history=None, chain_of_a
       db: The colleciton of documents to use for RAG (assumes ChromaDB).
       model: Chat model to use.
       user_query: The query to give to the chat model. Defaults to None.
-      user_history: The history to give to the chat model. Defaults to None.
+      user_history: The history to give to the chat model. Defaults to False.
       chain_of_agents: Whether to use a chain of agents to summarize context.
     
     Returns:
@@ -518,6 +518,10 @@ def get_response(vars, db, model, user_query=None, user_history=None, chain_of_a
         else:
             response = model.invoke(prompt)
     
+    if not isinstance(response, str):
+        response = response.content
+    
+    metadata = None
     if context_text is not None:
-        response = f"{response.content}\n\n[]----------[ Context ]----------[]\n\n{context_text}"
-    return response
+        metadata = context_text
+    return {"response": response, "metadata": metadata}
