@@ -18,8 +18,8 @@ from sys import exit
 import os, argparse, gc
 
 
-def parse_arguments():
-    """Parse command-line arguments using argparse.
+def parse_rag_arguments():
+    """Parse command-line arguments for rag server using argparse.
 
     Returns:
       All arguments that can be set through the cmd.
@@ -48,7 +48,7 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_docs
       Dicitonary containing all variables to be used by other functions.
     """
     # Get arguments from command line
-    args = parse_arguments()
+    args = parse_rag_arguments()
 
     # Modify num_docs if needed
     if num_docs is not None:

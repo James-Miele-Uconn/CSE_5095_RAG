@@ -2,10 +2,28 @@ from time import sleep, strftime, gmtime
 from shutil import copy
 import gradio as gr # type: ignore
 import pandas as pd
-import requests, os
+import requests, os, argparse
+
+
+def parse_webui_arguments():
+    """Parse command-line arguments for webui using argparse.
+
+    Returns:
+      All arguments that can be set through the cmd.
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--rag_server_ip", metavar="", help="\twhat address to use for the rag server. Defaults to 127.0.0.1.", default="127.0.0.1", type=str)
+    parser.add_argument("--rag_server_port", metavar="", help="\twhat port to use for the rag server. Defaults to 5000.", default="5000", type=str)
+    args = parser.parse_args()
+
+    return args
+
+webui_args = parse_webui_arguments()
+rag_ip = webui_args.rag_server_ip
+rag_port = webui_args.rag_server_port
 
 # Hack to allow downloading files from localhost
-gr.processing_utils.PUBLIC_HOSTNAME_WHITELIST.append("127.0.0.1")
+gr.processing_utils.PUBLIC_HOSTNAME_WHITELIST.append(rag_ip)
 
 # Global values for state tracking
 need_restart = False
@@ -38,7 +56,7 @@ def context_to_server(cur_topic, files):
     for file in files:
         cur_file = open(file, "rb")
         file_data = {'file': cur_file}
-        resp = requests.post(f"http://127.0.0.1:5000/upload/{cur_topic}", files=file_data)
+        resp = requests.post(f"http://{rag_ip}:{rag_port}/upload/{cur_topic}", files=file_data)
         upload_resp = resp.json()
         cur_file.close()
         if not upload_resp['status'] == "ok":
@@ -51,12 +69,12 @@ def context_to_server(cur_topic, files):
 
 # Show the currently uploaded context files
 def show_context_files(cur_topic):
-    resp = requests.post(f"http://127.0.0.1:5000/context/{cur_topic}")
+    resp = requests.post(f"http://{rag_ip}:{rag_port}/context/{cur_topic}")
     files = resp.json()['files']
 
     output = []
     for file in files:
-        output.append(f"http://127.0.0.1:5000/download/{cur_topic}/{file}")
+        output.append(f"http://{rag_ip}:{rag_port}/download/{cur_topic}/{file}")
 
     return output
 
@@ -83,6 +101,8 @@ def dl_all_server_context(cur_topic, files_list):
         new_path = f"./saved_context/{cur_topic}/{fname}"
         if not os.path.exists(new_path):
             copy(file, new_path)
+    
+    gr.Info("All context files downloaded")
 
 
 # Delete single context file
@@ -90,7 +110,7 @@ def delete_single_context(cur_topic, deleted: gr.DeletedFileData):
     global context_changed
 
     fname = os.path.basename(deleted.file.path)
-    resp = requests.post(f"http://127.0.0.1:5000/delete/{cur_topic}/{fname}")
+    resp = requests.post(f"http://{rag_ip}:{rag_port}/delete/{cur_topic}/{fname}")
     del_resp = resp.json()
     if del_resp['status'] == "error":
         raise gr.Error(f"Error deleting file {fname}", duration=None)
@@ -107,7 +127,7 @@ def delete_all_context(cur_topic, files_list):
 
     for file in files_list:
         fname = os.path.basename(file)
-        resp = requests.post(f"http://127.0.0.1:5000/delete/{cur_topic}/{fname}")
+        resp = requests.post(f"http://{rag_ip}:{rag_port}/delete/{cur_topic}/{fname}")
         del_resp = resp.json()
         if del_resp['status'] == "error":
             raise gr.Error(f"Error deleting file {fname}", duration=None)
@@ -374,7 +394,7 @@ def delete_current_topic(cur_topic, embedding_choice):
         return gr.Dropdown()
 
     data = {"embedding_choice": embedding_choice}
-    resp = requests.post(f"http://127.0.0.1:5000/delete_topic/{cur_topic}", data=data)
+    resp = requests.post(f"http://{rag_ip}:{rag_port}/delete_topic/{cur_topic}", data=data)
     del_resp = resp.json()
     if del_resp["status"] == "error":
         raise gr.Error(del_resp["issue"], duration=None)
@@ -402,7 +422,7 @@ def delete_current_topic(cur_topic, embedding_choice):
 
 # Make new topic
 def make_new_topic(new_topic):
-    resp = requests.post(f"http://127.0.0.1:5000/new_topic/{new_topic}")
+    resp = requests.post(f"http://{rag_ip}:{rag_port}/new_topic/{new_topic}")
     mk_resp = resp.json()
     if not mk_resp["status"] == "ok":
         raise gr.Error("Issue making new topic", duration=None)
@@ -433,7 +453,7 @@ def make_new_topic(new_topic):
 
 # Show api keys
 def show_api_keys(cur_topic):
-    resp = requests.post(f"http://127.0.0.1:5000/get_api_keys/{cur_topic}")
+    resp = requests.post(f"http://{rag_ip}:{rag_port}/get_api_keys/{cur_topic}")
     api_resp = resp.json()
     if api_resp["status"] == "error":
         raise gr.Error(api_resp["issue"], duration=None)
@@ -457,7 +477,7 @@ def save_api_keys(cur_topic, api_keys):
 
     cur_file = open("./temp_csv.csv", "rb")
     file_data = {"file": cur_file}
-    resp = requests.post(f"http://127.0.0.1:5000/save_api_keys/{cur_topic}", files=file_data)
+    resp = requests.post(f"http://{rag_ip}:{rag_port}/save_api_keys/{cur_topic}", files=file_data)
     upload_resp = resp.json()
     if upload_resp["status"] == "error":
         raise gr.Error(upload_resp["issue"])
@@ -472,7 +492,7 @@ def save_api_keys(cur_topic, api_keys):
 
 # Purge api keys
 def purge_api_keys(cur_topic):
-    resp = requests.post(f"http://127.0.0.1:5000/purge_api_keys/{cur_topic}")
+    resp = requests.post(f"http://{rag_ip}:{rag_port}/purge_api_keys/{cur_topic}")
     del_resp = resp.json()
     if del_resp["status"] == "error":
         raise gr.Error(del_resp["issue"], duration=None)
@@ -562,7 +582,7 @@ def run_rag(message, history, cur_topic, use_history, embedding_choice, model_ch
         "chunk_overlap": chunk_overlap,
         "refresh_db": refresh_db
     }
-    resp = requests.post(f"http://127.0.0.1:5000/setup/{cur_topic}", data=setup_info)
+    resp = requests.post(f"http://{rag_ip}:{rag_port}/setup/{cur_topic}", data=setup_info)
     setup_response = resp.json()
     if setup_response["status"] == "error":
         return setup_response['issue']
@@ -570,7 +590,7 @@ def run_rag(message, history, cur_topic, use_history, embedding_choice, model_ch
     if use_history and history:
         # Summarize history
         hist_info = {"user_history": history}
-        resp = requests.post(f"http://127.0.0.1:5000/response/{cur_topic}", data=hist_info)
+        resp = requests.post(f"http://{rag_ip}:{rag_port}/response/{cur_topic}", data=hist_info)
         hist_resp = resp.json()
         if hist_resp["status"] == "error":
             return hist_resp["issue"]
@@ -578,7 +598,7 @@ def run_rag(message, history, cur_topic, use_history, embedding_choice, model_ch
 
         # Send query and history summary
         resp_info = {"user_query": message, "user_history": hist_summary, "no_context": no_context, "chain_of_agents": chain_of_agents}
-        resp = requests.post(f"http://127.0.0.1:5000/response/{cur_topic}", data=resp_info)
+        resp = requests.post(f"http://{rag_ip}:{rag_port}/response/{cur_topic}", data=resp_info)
         response_dict = resp.json()
         if response_dict["status"] == "error":
             return response_dict["issue"]
@@ -587,7 +607,7 @@ def run_rag(message, history, cur_topic, use_history, embedding_choice, model_ch
     else:
         # Send query to RAG system
         resp_info = {"user_query": message, "no_context": no_context, "chain_of_agents": chain_of_agents}
-        resp = requests.post(f"http://127.0.0.1:5000/response/{cur_topic}", data=resp_info)
+        resp = requests.post(f"http://{rag_ip}:{rag_port}/response/{cur_topic}", data=resp_info)
         response_dict = resp.json()
         if response_dict["status"] == "error":
             return response_dict["issue"]
