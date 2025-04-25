@@ -360,4 +360,4 @@ def response(topic):
     return jsonify({"status": "ok", "response": response, "context_text": context_text})
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0")

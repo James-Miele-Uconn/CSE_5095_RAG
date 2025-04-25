@@ -24,6 +24,8 @@ rag_port = webui_args.rag_server_port
 
 # Hack to allow downloading files from localhost
 gr.processing_utils.PUBLIC_HOSTNAME_WHITELIST.append(rag_ip)
+gr.processing_utils.PUBLIC_HOSTNAME_WHITELIST.append(rag_ip)
+os.environ["NO_PROXY"] = os.environ["no_proxy"] = "localhost, 127.0.0.1/8, ::1"
 
 # Global values for state tracking
 need_restart = False
