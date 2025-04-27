@@ -15,6 +15,7 @@ from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline, Ch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from time import time, gmtime, strftime
 from sys import exit
+from werkzeug.utils import secure_filename # type: ignore
 import os, argparse, gc
 
 
@@ -92,7 +93,7 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_docs
 
     # Embedding to use, determines if running online
     embeddings_dict = {
-        "ollama": ["nomic-embed-text", "mxbai-embed-large"],
+        "ollama": ["nomic-embed-text", "mxbai-embed-large", "snowflake-arctic-embed:335m"],
         "local": ["nomic-embed-text-v1.5", "bert-base-uncased"],
         "online": ["openai"]
     }
@@ -102,8 +103,8 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_docs
     # Model to use, determines if running online
     # Models: deepseek-r1:[7b|14b|32b|70b], llama3.3, mistral, mixtral:8x7b
     models_dict = {
-        "ollama": ["deepseek-r1:7b", "deepseek-r1:14b", "deepseek-r1:32b", "deepseek-r1:70b", "llama3.3", "mistral", "mixtral:8x7b", "deepseek-r1:671b"],
-        "local": ["bert-base-uncased", "gpt2", "Mistral-7B-Instruct-v0.3", "zephyr-7b-beta", "DarkForest-20B-v3.0"],
+        "ollama": ["deepseek-r1:7b", "deepseek-r1:14b", "deepseek-r1:32b", "deepseek-r1:70b", "r1-1776:70b", "llama3.3", "mistral:7b", "mistral:7b-instruct", "mistral:7b-instruct-fp16", "mixtral:8x7b", "deepseek-r1:671b"],
+        "local": ["bert-base-uncased", "gpt2", "Mistral-7B-Instruct-v0.3", "zephyr-7b-beta", "DarkForest-20B-v2.0", "DarkForest-20B-v3.0"],
         "online": ["openai"]
     }
     if model_choice is None:
@@ -236,6 +237,7 @@ def load_database(vars, embedding):
     chunk_overlap = vars["chunk_overlap"]
 
     # Create directory for database using current embedding model, if needed
+    embedding_choice = secure_filename(embedding_choice)
     cur_embed_db = os.path.join(roots["CHROMA_ROOT"], f"{embedding_choice}")
     if not os.path.exists(cur_embed_db):
         try:
@@ -323,7 +325,7 @@ def load_model(vars):
             model = ChatHuggingFace(llm=llm)
     else:
         if (model_choice == "openai"):
-            model = ChatOpenAI(openai_api_key=api_keys["openai"])
+            model = ChatOpenAI(openai_api_key=api_keys["openai"], model="o4-mini")
     
     return model
 

@@ -338,7 +338,7 @@ def response(topic):
         has_context = [bool(os.listdir(roots[root])) for root in context_roots]
         need_context = not any(has_context)
         if need_context:
-            return jsonify({"response": "No context files have been provided, at least one is needed."})
+            return jsonify({"status": "error", "issue": "No context files have been provided, at least one is needed."})
 
     # Get response from RAG system
     try:

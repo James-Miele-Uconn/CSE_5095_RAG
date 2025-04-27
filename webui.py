@@ -34,15 +34,15 @@ context_changed = False
 
 # Options lists for each type of embedding model
 embeddings_dict = {
-    "ollama": ["mxbai-embed-large", "nomic-embed-text"],
+    "ollama": ["mxbai-embed-large", "snowflake-arctic-embed:335m", "nomic-embed-text"],
     "local": ["nomic-embed-text-v1.5", "bert-base-uncased"],
     "online": ["openai"]
 }
 
 # Options lists for each type of chat model
 models_dict = {
-    "ollama": ["deepseek-r1:7b", "deepseek-r1:14b", "deepseek-r1:32b", "deepseek-r1:70b", "llama3.3", "mistral", "mixtral:8x7b", "deepseek-r1:671b"],
-    "local": ["bert-base-uncased", "gpt2", "Mistral-7B-Instruct-v0.3", "zephyr-7b-beta", "DarkForest-20B-v3.0"],
+    "ollama": ["deepseek-r1:7b", "deepseek-r1:14b", "deepseek-r1:32b", "deepseek-r1:70b", "r1-1776:70b", "llama3.3", "mistral:7b", "mistral:7b-instruct", "mistral:7b-instruct-fp16", "mixtral:8x7b"],
+    "local": ["bert-base-uncased", "gpt2", "Mistral-7B-Instruct-v0.3", "zephyr-7b-beta", "DarkForest-20B-v2.0", "DarkForest-20B-v3.0"],
     "online": ["openai"]
 }
 
@@ -175,7 +175,13 @@ def local_to_history(history_file):
     except Exception as e:
         raise gr.Error(e, duration=None)
 
-    return [gr.Chatbot(type="messages", value=history), gr.Chatbot(type="messages", value=history)]
+    output = [
+        gr.Chatbot(type="messages", value=history),
+        gr.Chatbot(type="messages", value=history),
+        gr.File(value=None)
+    ]
+
+    return output
 
 
 # Update global variable checking for reload
@@ -713,13 +719,16 @@ def get_setup_vars():
         primary_hue=saved_color,
         secondary_hue=saved_color
     ).set(
-        color_accent_soft='*primary_700',
+        color_accent_soft='*primary_200',
         color_accent_soft_dark='*primary_700',
-        border_color_primary='*primary_800',
+        border_color_primary='*primary_300',
         border_color_primary_dark='*primary_800',
-        border_color_accent='*primary_950',
+        border_color_accent='*primary_300',
         border_color_accent_dark='*primary_950'
     )
+    # color_accent_soft='*primary_700',
+    # border_color_primary='*primary_800',
+    # border_color_accent='*primary_950',
 
     cur_layout = "bubble"
     try:
@@ -1083,7 +1092,7 @@ def setup_layout(css, saved_color, theme, cur_layout, saved_avatar_size, saved_a
 
         # Handle chat history
         save_history.click(history_to_local, inputs=[cur_topic, main_chat.chatbot, save_name])
-        upload_history.click(local_to_history, inputs=[history_file], outputs=[view_history, main_chat.chatbot])
+        upload_history.click(local_to_history, inputs=[history_file], outputs=[view_history, main_chat.chatbot, history_file])
 
         # Handle general options
         embedding_type.change(update_embedding_opts, inputs=[embedding_type], outputs=[embedding_choice])
