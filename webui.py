@@ -42,7 +42,7 @@ embeddings_dict = {
 # Options lists for each type of chat model
 models_dict = {
     "ollama": ["deepseek-r1:7b", "deepseek-r1:14b", "deepseek-r1:32b", "deepseek-r1:70b", "r1-1776:70b", "llama3.3", "mistral:7b", "mistral:7b-instruct", "mistral:7b-instruct-fp16", "mixtral:8x7b"],
-    "local": ["bert-base-uncased", "gpt2", "Mistral-7B-Instruct-v0.3", "zephyr-7b-beta", "DarkForest-20B-v2.0", "DarkForest-20B-v3.0"],
+    "local": ["bert-base-uncased", "gpt2", "Mistral-7B-Instruct-v0.3", "zephyr-7b-beta", "DarkSapling-7B-v2.0"],
     "online": ["openai"]
 }
 
@@ -596,6 +596,7 @@ def run_rag(message, history, cur_topic, use_history, embedding_choice, model_ch
 
     if use_history and history:
         # Summarize history
+        history = "\n\n".join([msg["content"] for msg in history])
         hist_info = {"user_history": history}
         resp = requests.post(f"http://{rag_ip}:{rag_port}/response/{cur_topic}", data=hist_info)
         hist_resp = resp.json()
@@ -623,6 +624,9 @@ def run_rag(message, history, cur_topic, use_history, embedding_choice, model_ch
 
     output = []
     output.append({"role": "assistant", "metadata": None, "content": response, "options": None})
+    if use_history and history:
+        history_meta_info = {"title": "History", "status": "done"}
+        output.append({"role": "assistant", "metadata": history_meta_info, "content": hist_summary, "options": None})
     if context_text is not None:
         context_meta_info = {"title": "Context", "status": "done"}
         output.append({"role": "assistant", "metadata": context_meta_info, "content": context_text, "options": None})
@@ -885,7 +889,7 @@ def setup_layout(css, saved_color, theme, cur_layout, saved_avatar_size, saved_a
                         chatbot=gr.Chatbot(
                             type="messages",
                             show_label=False,
-                            height=420,
+                            height=600,
                             avatar_images=initial_avatar_images,
                             placeholder="# Welcome to the experimental RAG system!",
                             layout=cur_layout

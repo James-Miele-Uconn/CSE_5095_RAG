@@ -104,7 +104,7 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_docs
     # Models: deepseek-r1:[7b|14b|32b|70b], llama3.3, mistral, mixtral:8x7b
     models_dict = {
         "ollama": ["deepseek-r1:7b", "deepseek-r1:14b", "deepseek-r1:32b", "deepseek-r1:70b", "r1-1776:70b", "llama3.3", "mistral:7b", "mistral:7b-instruct", "mistral:7b-instruct-fp16", "mixtral:8x7b", "deepseek-r1:671b"],
-        "local": ["bert-base-uncased", "gpt2", "Mistral-7B-Instruct-v0.3", "zephyr-7b-beta", "DarkForest-20B-v2.0", "DarkForest-20B-v3.0"],
+        "local": ["bert-base-uncased", "gpt2", "Mistral-7B-Instruct-v0.3", "zephyr-7b-beta", "DarkSapling-7B-v2.0"],
         "online": ["openai"]
     }
     if model_choice is None:
@@ -463,6 +463,7 @@ def get_response(vars, db, model, user_query=None, user_history=None, no_context
 
             # Create context text
             if chain_of_agents:
+
                 cur_summary = None
                 for chunk in context_chunks:
                     # Create prompt
