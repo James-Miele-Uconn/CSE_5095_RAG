@@ -28,21 +28,25 @@ def parse_rag_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--embedding", metavar="", help="\twhat embedding model to use. Default is mxbai-embed-large.", default="mxbai-embed-large", type=str)
     parser.add_argument("--model", metavar="", help="\twhat chat model to use. Default is deepseek-r1:32b", default="deepseek-r1:7b", type=str)
-    parser.add_argument("--num_docs", metavar="", help="\thow many context chunks to use. Default is 5 chunks.", default=5, type=int)
+    parser.add_argument("--num_pdfs", metavar="", help="\thow many pdf context chunks to use. Default is 3 chunks.", default=3, type=int)
+    parser.add_argument("--num_csvs", metavar="", help="\thow many csv context chunks to use. Default is 3 chunks.", default=3, type=int)
+    parser.add_argument("--num_txts", metavar="", help="\thow many txt context chunks to use. Default is 3 chunks.", default=3, type=int)
     parser.add_argument("--refresh_db", help="\tforce the database to be remade.", action="store_true")
     args = parser.parse_args()
 
     return args
 
 
-def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_docs=None, only_roots=False):
+def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_pdfs=None, num_csvs=None, num_txts=None, only_roots=False):
     """Define setup variables.
 
     Args:
       topic: Which directory to use for context and database files.
       embedding_choice: Which embedding model to use. Defaults to None, to be overwritten.
       model_choice: Which chat model to use. Defaults to None, to be overwritten.
-      num_docs: Number of chunks to use for answers. Defaults to None, as a flag for argparse.
+      num_pdfs: Number of pdf chunks to use for answers. Defaults to None, as a flag for argparse.
+      num_csvs: Number of csv chunks to use for answers. Defaults to None, as a flag for argparse.
+      num_txts: Number of txt chunks to use for answers. Defaults to None, as a flag for argparse.
       only_roots: Whether to only return roots. Defaults to False.
 
     Returns:
@@ -51,9 +55,13 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_docs
     # Get arguments from command line
     args = parse_rag_arguments()
 
-    # Modify num_docs if needed
-    if num_docs is not None:
-        args.num_docs = num_docs
+    # Modify chunk options if needed
+    if num_pdfs is not None:
+        args.num_pdfs = num_pdfs
+    if num_csvs is not None:
+        args.num_csvs = num_csvs
+    if num_txts is not None:
+        args.num_txts = num_txts
 
     # Set directories to be used
     roots = dict()
@@ -66,6 +74,9 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_docs
     roots["CSV_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "csv_files\\")
     roots["TXT_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "txt_files\\")
     roots["CHROMA_ROOT"] = os.path.join(roots["TOPIC_ROOT"], "chroma_db_files\\")
+    roots["PDF_DB_ROOT"] = os.path.join(roots["CHROMA_ROOT"], "pdf\\")
+    roots["CSV_DB_ROOT"] = os.path.join(roots["CHROMA_ROOT"], "csv\\")
+    roots["TXT_DB_ROOT"] = os.path.join(roots["CHROMA_ROOT"], "txt\\")
     roots["MODIFIED_ROOT"] = os.path.join(roots["CHROMA_ROOT"], "(0)modified-times\\")
     roots["API_ROOT"] = os.path.join(roots["TOPIC_ROOT"], "api_keys\\")
 
@@ -74,6 +85,9 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_docs
         "TOPIC_ROOT",
         "API_ROOT",
         "CHROMA_ROOT",
+        "PDF_DB_ROOT",
+        "CSV_DB_ROOT",
+        "TXT_DB_ROOT",
         "MODIFIED_ROOT",
         "CONTEXT_ROOT",
         "PDF_ROOT",
@@ -183,48 +197,39 @@ def load_embedding(vars):
     return embedding
 
 
-def load_and_chunk(splitter, locs):
+def load_and_chunk(splitter, loc):
     """Load and chunk documents from specified locations.
 
     Args:
       splitter: The text splitter to use.
-      locs: Dicitonary of paths to context file directories.
+      loc: Path to context file directory.
     
     Returns:
-      Dictionary of chunked documents
+      Chunked documents
     """
-    # Load pdf documents
-    pdf_chunks = None
-    if os.listdir(locs['pdf_loc']):
-      pdf_loader = PyPDFDirectoryLoader(locs['pdf_loc'])
-      pdf_pages = pdf_loader.load()
-      pdf_chunks = splitter.split_documents(pdf_pages)
+    # Determine what loader to use
+    if "pdf" in loc:
+        loader = PyPDFDirectoryLoader(loc)
+    elif "csv" in loc:
+        loader = DirectoryLoader(loc, loader_cls=CSVLoader)
+    elif "txt" in loc:
+        loader = DirectoryLoader(loc, loader_cls=TextLoader)
+    else:
+        loader = None
 
-    # Load csv documents
-    csv_chunks = None
-    if os.listdir(locs['csv_loc']):
-      csv_loader = DirectoryLoader(locs['csv_loc'], loader_cls=CSVLoader)
-      csv_pages = csv_loader.load()
-      csv_chunks = splitter.split_documents(csv_pages)
+    pages = loader.load()
+    chunks = splitter.split_documents(pages)
 
-    # Load txt documents
-    txt_chunks = None
-    if os.listdir(locs['txt_loc']):
-        txt_loader = DirectoryLoader(locs['txt_loc'], loader_cls=TextLoader)
-        txt_pages = txt_loader.load()
-        txt_chunks = splitter.split_documents(txt_pages)
-
-    output = {'pdf': pdf_chunks, 'csv': csv_chunks, 'txt': txt_chunks}
-
-    return output
+    return chunks
 
 
-def load_database(vars, embedding):
+def load_database(vars, embedding, db_type):
     """Create or load database of context information.
 
     Args:
       vars: Dictionary containing setup variables.
       embedding: The embedding model to use for the database.
+      db_type: Which type of database to load.
     
     Returns:
       Database to be used.
@@ -244,6 +249,12 @@ def load_database(vars, embedding):
             os.mkdir(cur_embed_db)
         except Exception as e:
             raise Exception(f"Error creating database directory for {embedding_choice}")
+    cur_type_db = os.path.join(cur_embed_db, f"{db_type}")
+    if not os.path.exists(cur_type_db):
+        try:
+            os.mkdir(cur_type_db)
+        except Exception as e:
+            raise Exception(f"Error creating database directory for {embedding_choice}/{db_type}")
 
     # Determine last modified time of context information
     try:
@@ -254,7 +265,7 @@ def load_database(vars, embedding):
 
     # Determine last modified time of current embedding's database
     try:
-        with open(f"{roots['MODIFIED_ROOT']}{embedding_choice}.txt", "r") as inf:
+        with open(f"{roots['MODIFIED_ROOT']}{embedding_choice}_{db_type}.txt", "r") as inf:
             cur_db_time = float(inf.readline().strip())
     except:
         cur_db_time = 0
@@ -264,38 +275,33 @@ def load_database(vars, embedding):
         need_refresh = True
 
     # Load or build database
-    db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db, client_settings=Settings(allow_reset=True))
+    db = Chroma(collection_name=f"{embedding_choice}_{db_type}", embedding_function=embedding, persist_directory=cur_type_db, client_settings=Settings(allow_reset=True))
     if need_refresh:
         # Remove old database info
         try:
-            db._client.delete_collection(embedding_choice)
+            db._client.delete_collection(f"{embedding_choice}_{db_type}")
             db._client.clear_system_cache()
             db._client.reset()
             del db
             gc.collect()
-            db = Chroma(collection_name=embedding_choice, embedding_function=embedding, persist_directory=cur_embed_db, client_settings=Settings(allow_reset=True))
+            db = Chroma(collection_name=f"{embedding_choice}_{db_type}", embedding_function=embedding, persist_directory=cur_type_db, client_settings=Settings(allow_reset=True))
         except:
-            raise Exception(f"Error deleting and remaking database for {embedding_choice}")
+            raise Exception(f"Error deleting and remaking database for {embedding_choice}/{db_type}")
         
         # Give context information to database
-        context_locs = {
-            'pdf_loc': roots["PDF_ROOT"],
-            'csv_loc': roots["CSV_ROOT"],
-            'txt_loc': roots["TXT_ROOT"]
-        }
+        context_loc = roots[f"{db_type.upper()}_ROOT"]
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-        chunks = load_and_chunk(text_splitter, context_locs)
-        for key in chunks.keys():
-            # Ensure batch size is less than max size (currently 5461)
-            if chunks[key] is not None:
-                if len(chunks[key]) > 5461:
-                    for idx in range(0, len(chunks[key]), 5461):
-                        db.add_documents(documents=chunks[key][idx:idx+5461])
-                else:
-                    db.add_documents(documents=chunks[key])
+        chunks = load_and_chunk(text_splitter, context_loc)
+        
+        # Ensure batch size is less than max size (currently 5461)
+        if len(chunks) > 5461:
+            for idx in range(0, len(chunks), 5461):
+                db.add_documents(documents=chunks[idx:idx+5461])
+        else:
+            db.add_documents(documents=chunks)
         
         # Save current time as last modified time for context information for this embedding
-        with open(f"{roots['MODIFIED_ROOT']}{embedding_choice}.txt", "w") as outf:
+        with open(f"{roots['MODIFIED_ROOT']}{embedding_choice}_{db_type}.txt", "w") as outf:
             outf.write(f"{time()}")
 
     return db
@@ -330,29 +336,15 @@ def load_model(vars):
     return model
 
 
-def load_models_and_db(vars):
-    """Load embedding model and chat model, and load or create database.
-    
-    Args:
-      vars: Dictionary containing setup variables.
-    
-    Returns:
-      Tuple of database and chat model.
-    """
-    embedding = load_embedding(vars)
-    db = load_database(vars, embedding)
-    model = load_model(vars)
-
-    return (db, model)
-
-
-def get_response(vars, db, model, user_query=None, user_history=None, no_context=None, chain_of_agents=False):
+def get_response(vars, model, pdf_db=None, csv_db=None, txt_db=None, user_query=None, user_history=None, no_context=None, chain_of_agents=False):
     """Given input and some desired response type, create a prompt and receive a response.
 
     Args:
       vars: Dictionary containing setup variables.
-      db: The colleciton of documents to use for RAG (assumes ChromaDB).
       model: Chat model to use.
+      pdf_db: The colleciton of pdf documents to use for RAG. Defaults to None.
+      csv_db: The colleciton of csv documents to use for RAG. Defaults to None.
+      txt_db: The colleciton of txt documents to use for RAG. Defaults to None.
       user_query: The query to give to the chat model. Defaults to None.
       user_history: The history to give to the chat model. Defaults to False.
       no_context: Whether the RAG system should be used. Defaults to None.
@@ -381,56 +373,23 @@ def get_response(vars, db, model, user_query=None, user_history=None, no_context
             prompt = prompt_template.format(history=user_history, message=user_query)
         else:
             # Get context information
-            cur_chunks = db.similarity_search_with_score(user_query, k=args.num_docs)
-            context_chunks = [chunk.page_content for chunk, _score in cur_chunks]
+            pdf_context_chunks = []
+            if pdf_db is not None:
+                cur_pdf_chunks = pdf_db.similarity_search_with_score(user_query, k=args.num_pdfs)
+                pdf_context_chunks = [chunk.page_content for chunk, _score in cur_pdf_chunks]
+
+            csv_context_chunks = []
+            if csv_db is not None:
+                cur_csv_chunks = csv_db.similarity_search_with_score(user_query, k=args.num_csvs)
+                csv_context_chunks = [chunk.page_content for chunk, _score in cur_csv_chunks]
+
+            txt_context_chunks = []
+            if txt_db is not None:
+                cur_txt_chunks = txt_db.similarity_search_with_score(user_query, k=args.num_txts)
+                txt_context_chunks = [chunk.page_content for chunk, _score in cur_txt_chunks]
 
             # Create context text
-            if chain_of_agents:
-                cur_summary = None
-                for chunk in context_chunks:
-                    # Create prompt
-                    if cur_summary is None:
-                        prompt_template = """
-                        Create a summary of the following chunk of context information:
-                        {context}
-                        Give a detailed summary.
-                        """
-                        prompt_template = ChatPromptTemplate.from_template(prompt_template)
-                        prompt = prompt_template.format(context=chunk)
-                    else:
-                        prompt_template = """
-                        Below is a summary of the previous context information used:
-                        {summary}
-                        Using the above information, create a summary of the following chunk of context information:
-                        {context}
-                        Give a detailed summary.
-                        """
-                        prompt_template = ChatPromptTemplate.from_template(prompt_template)
-                        prompt = prompt_template.format(summary=cur_summary, context=chunk)
-
-                    # Get response
-                    if (model_choice == "openai"):
-                        response = model.invoke(prompt)
-                    else:
-                        if (model_choice in models_dict["local"]):
-                            response = model.invoke(prompt)
-                        else:
-                            response = model.invoke(prompt)
-                    response = response.content
-
-                    # Format response
-                    if (model_choice == "Mistral-7B-Instruct-v0.3"):
-                        prompt_end = response.find("[/INST]")
-                        response = response[(prompt_end + 7):]
-                    elif ("deepseek-r1" in model_choice):
-                        think_end = response.find("</think>")
-                        response = response[(think_end + 8):]
-                    cur_summary = response
-
-                chunk_text = "\n\n".join(context_chunks)
-                context_text = f"Summary:\n{cur_summary}\n\nChunks:\n{chunk_text}"
-            else:
-                context_text = "\n\n".join(context_chunks)
+            context_text = "\n\n".join(pdf_context_chunks + csv_context_chunks + txt_context_chunks)
 
             # Set up prompt
             prompt_template = """
@@ -458,57 +417,23 @@ def get_response(vars, db, model, user_query=None, user_history=None, no_context
             prompt = prompt_template.format(message=user_query)
         else:
             # Get context information
-            cur_chunks = db.similarity_search_with_score(user_query, k=args.num_docs)
-            context_chunks = [chunk.page_content for chunk, _score in cur_chunks]
+            pdf_context_chunks = []
+            if pdf_db is not None:
+                cur_pdf_chunks = pdf_db.similarity_search_with_score(user_query, k=args.num_pdfs)
+                pdf_context_chunks = [chunk.page_content for chunk, _score in cur_pdf_chunks]
+
+            csv_context_chunks = []
+            if csv_db is not None:
+                cur_csv_chunks = csv_db.similarity_search_with_score(user_query, k=args.num_csvs)
+                csv_context_chunks = [chunk.page_content for chunk, _score in cur_csv_chunks]
+
+            txt_context_chunks = []
+            if txt_db is not None:
+                cur_txt_chunks = txt_db.similarity_search_with_score(user_query, k=args.num_txts)
+                txt_context_chunks = [chunk.page_content for chunk, _score in cur_txt_chunks]
 
             # Create context text
-            if chain_of_agents:
-
-                cur_summary = None
-                for chunk in context_chunks:
-                    # Create prompt
-                    if cur_summary is None:
-                        prompt_template = """
-                        Create a summary of the following chunk of context information:
-                        {context}
-                        Give a detailed summary.
-                        """
-                        prompt_template = ChatPromptTemplate.from_template(prompt_template)
-                        prompt = prompt_template.format(context=chunk)
-                    else:
-                        prompt_template = """
-                        Below is a summary of the previous context information used:
-                        {summary}
-                        Using the above information, create a summary of the following chunk of context information:
-                        {context}
-                        Give a detailed summary.
-                        """
-                        prompt_template = ChatPromptTemplate.from_template(prompt_template)
-                        prompt = prompt_template.format(summary=cur_summary, context=chunk)
-
-                    # Get response
-                    if (model_choice == "openai"):
-                        response = model.invoke(prompt)
-                    else:
-                        if (model_choice in models_dict["local"]):
-                            response = model.invoke(prompt)
-                        else:
-                            response = model.invoke(prompt)
-                    response = response.content
-
-                    # Format response
-                    if (model_choice == "Mistral-7B-Instruct-v0.3"):
-                        prompt_end = response.find("[/INST]")
-                        response = response[(prompt_end + 7):]
-                    elif ("deepseek-r1" in model_choice):
-                        think_end = response.find("</think>")
-                        response = response[(think_end + 8):]
-                    cur_summary = response
-
-                chunk_text = "\n\n".join(context_chunks)
-                context_text = f"Summary:\n{cur_summary}\n\nChunks:\n{chunk_text}"
-            else:
-                context_text = "\n\n".join(context_chunks)
+            context_text = "\n\n".join(pdf_context_chunks + csv_context_chunks + txt_context_chunks)
 
             # Set up prompt
             prompt_template = """

@@ -2,7 +2,7 @@ import gradio as gr # type: ignore
 import requests
 
 # Main chat function
-def run_rag(message, history, rag_ip, rag_port, history_uploaded, context_changed, cur_topic, use_history, embedding_choice, model_choice, no_context, num_docs, chain_of_agents, chunk_size, chunk_overlap, refresh_db, uploaded_history):
+def run_rag(message, history, rag_ip, rag_port, history_uploaded, context_changed, cur_topic, use_history, embedding_choice, model_choice, no_context, num_pdfs, num_csvs, num_txts, chain_of_agents, chunk_size, chunk_overlap, refresh_db, uploaded_history):
     """Ensure the RAG system uses the desired setup, then request an answer from the system.
 
     Args:
@@ -17,7 +17,9 @@ def run_rag(message, history, rag_ip, rag_port, history_uploaded, context_change
       embedding_choice: Currently chosen embedding model to use.
       model_choice: Currently chosen chat model to use.
       no_context: Whether the RAG system should be used.
-      num_docs: Number of chunks to use when creating an answer.
+      num_pdfs: Number of pdf chunks to use when creating an answer.
+      num_csvs: Number of csv chunks to use when creating an answer.
+      num_txts: Number of txt chunks to use when creating an answer.
       chain_of_agents: Whether to use a chain of agents to summarize context.
       chunk_size: Size of chunks to use for database chunks.
       chunk_overlap: Amount of overlap to use for database chunks.
@@ -44,7 +46,9 @@ def run_rag(message, history, rag_ip, rag_port, history_uploaded, context_change
     setup_info = {
         "embedding_choice": embedding_choice,
         "model_choice": model_choice,
-        "num_docs": num_docs,
+        "num_pdfs": num_pdfs,
+        "num_csvs": num_csvs,
+        "num_txts": num_txts,
         "chunk_size": chunk_size,
         "chunk_overlap": chunk_overlap,
         "refresh_db": refresh_db

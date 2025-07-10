@@ -219,7 +219,7 @@ def setup_layout(vars, css, saved_color, theme, cur_layout, saved_avatar_size, s
                         )
 
                 # Various other common options
-                with gr.Column():
+                with gr.Group():
                     use_history = gr.Checkbox(
                         label="Add summary of chat history to prompt",
                         value=False
@@ -229,18 +229,35 @@ def setup_layout(vars, css, saved_color, theme, cur_layout, saved_avatar_size, s
                         label="Do not use RAG system",
                         show_label=False
                     )
-                    num_docs = gr.Slider(
-                        1,
-                        30,
-                        value=5,
-                        step=1,
-                        label="Number of chunks to use when answering query",
-                        visible=True
-                    )
                     chain_of_agents = gr.Checkbox(
                         label="Use Chain of Agents to summarize each chunk",
                         value=False
                     )
+                    with gr.Accordion(label="Chunk Options", open=False):
+                        num_pdfs = gr.Slider(
+                            1,
+                            10,
+                            value=3,
+                            step=1,
+                            label="Number of pdf chunks",
+                            visible=True
+                        )
+                        num_csvs = gr.Slider(
+                            1,
+                            10,
+                            value=3,
+                            step=1,
+                            label="Number of csv chunks",
+                            visible=True
+                        )
+                        num_txts = gr.Slider(
+                            1,
+                            10,
+                            value=3,
+                            step=1,
+                            label="Number of txt chunks",
+                            visible=True
+                        )
 
                 # Database options
                 with gr.Group():
@@ -324,7 +341,9 @@ def setup_layout(vars, css, saved_color, theme, cur_layout, saved_avatar_size, s
                             embedding_choice,
                             model_choice,
                             no_context,
-                            num_docs,
+                            num_pdfs,
+                            num_csvs,
+                            num_txts,
                             chain_of_agents,
                             chunk_size,
                             chunk_overlap,
@@ -524,7 +543,7 @@ def setup_layout(vars, css, saved_color, theme, cur_layout, saved_avatar_size, s
         # Handle general options
         embedding_type.change(update_embedding_opts, inputs=[embedding_type], outputs=[embedding_choice])
         model_type.change(update_chat_opts, inputs=[model_type], outputs=[model_choice])
-        no_context.change(update_context_opts, inputs=[no_context], outputs=[num_docs, chain_of_agents])
+        no_context.change(update_context_opts, inputs=[no_context], outputs=[num_pdfs, num_csvs, num_txts, chain_of_agents])
         refresh_db.change(show_chunk_opts, inputs=[refresh_db], outputs=[chunk_size, chunk_overlap, reset_chunk_opts])
         reset_chunk_opts.click(chunk_opt_defaults, outputs=[chunk_size, chunk_overlap])
 

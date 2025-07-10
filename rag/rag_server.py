@@ -10,7 +10,9 @@ app = Flask(__name__)
 # Global variables to use
 vars = None
 embedding = None
-db = None
+pdf_db = None
+csv_db = None
+txt_db = None
 model = None
 cur_topic = None
 
@@ -79,7 +81,7 @@ def purge_api_keys(topic):
 
 @app.route("/delete_topic/<topic>", methods=["POST"])
 def delete_topic(topic):
-    global vars, embedding, db, cur_topic
+    global vars, embedding, pdf_db, csv_db, txt_db, cur_topic
 
     # Get data from request
     embedding_choice = request.form["embedding_choice"]
@@ -90,13 +92,27 @@ def delete_topic(topic):
 
     # Reset settings to Default topic
     embedding = load_embedding(vars)
-    if db is not None:
-        db._client.delete_collection(embedding_choice)
-        db._client.clear_system_cache()
-        db._client.reset()
-        del db
+    if pdf_db is not None:
+        pdf_db._client.delete_collection(embedding_choice)
+        pdf_db._client.clear_system_cache()
+        pdf_db._client.reset()
+        del pdf_db
         gc.collect()
-        db = None
+        pdf_db = None
+    if csv_db is not None:
+        csv_db._client.delete_collection(embedding_choice)
+        csv_db._client.clear_system_cache()
+        csv_db._client.reset()
+        del csv_db
+        gc.collect()
+        csv_db = None
+    if txt_db is not None:
+        txt_db._client.delete_collection(embedding_choice)
+        txt_db._client.clear_system_cache()
+        txt_db._client.reset()
+        del txt_db
+        gc.collect()
+        txt_db = None
     cur_topic = "Default"
 
     # Remove old topic files
@@ -110,11 +126,11 @@ def delete_topic(topic):
 
 @app.route("/new_topic/<topic>", methods=["POST"])
 def new_topic(topic):
-    global vars, embedding, db, cur_topic
+    global vars, embedding, pdf_db, csv_db, txt_db, cur_topic
 
     # Set settings to new topic
     get_vars(topic, only_roots=True)
-    db = None
+    pdf_db = csv_db = txt_db = None
     cur_topic = topic
 
     return jsonify({"status": "ok"})
@@ -205,13 +221,15 @@ def upload_file(topic):
 
 @app.route("/setup/<topic>", methods=["POST"])
 def setup(topic):
-    global vars, embedding, db, model, cur_topic
+    global vars, embedding, pdf_db, csv_db, txt_db, model, cur_topic
 
     # Get variables from frontend
     cur_vars = {"embedding_choice": None, "model_choice": None}
     cur_vars["embedding_choice"] = request.form["embedding_choice"]
     cur_vars["model_choice"] = request.form["model_choice"]
-    num_docs = int(request.form["num_docs"])
+    num_pdfs = int(request.form["num_pdfs"])
+    num_csvs = int(request.form["num_csvs"])
+    num_txts = int(request.form["num_txts"])
     chunk_size = int(request.form["chunk_size"])
     chunk_overlap = int(request.form["chunk_overlap"])
     refresh_db = eval(request.form["refresh_db"])
@@ -223,9 +241,9 @@ def setup(topic):
         chunk_overlap = 0
 
     # Check if initial setup should happen
-    if (vars is None) or (embedding is None) or (db is None) or (model is None):
+    if (vars is None) or (embedding is None) or (pdf_db is None) or (csv_db is None) or (txt_db is None) or (model is None):
         try:
-            vars = get_vars(topic, cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
+            vars = get_vars(topic, cur_vars["embedding_choice"], cur_vars["model_choice"], num_pdfs, num_csvs, num_txts)
         except Exception as e:
             return jsonify({"status": "error", "issue": e.args[0]})
         vars["chunk_size"] = chunk_size
@@ -240,7 +258,13 @@ def setup(topic):
             return jsonify({"status": "error", "issue": e})
 
         try:
-            db = load_database(vars, embedding)
+            pdf_db = csv_db = txt_db = None
+            if os.listdir(vars["roots"]["PDF_ROOT"]):
+                pdf_db = load_database(vars, embedding, "pdf")
+            if os.listdir(vars["roots"]["CSV_ROOT"]):
+                csv_db = load_database(vars, embedding, "csv")
+            if os.listdir(vars["roots"]["TXT_ROOT"]):
+                txt_db = load_database(vars, embedding, "txt")
         except Exception as e:
             return jsonify({"status": "error", "issue": e})
 
@@ -260,14 +284,20 @@ def setup(topic):
                 updates[var] = True
         
         try:
-            vars = get_vars(topic, cur_vars["embedding_choice"], cur_vars["model_choice"], num_docs)
+            vars = get_vars(topic, cur_vars["embedding_choice"], cur_vars["model_choice"], num_pdfs, num_csvs, num_txts)
         except Exception as e:
             return jsonify({"status": "error", "issue": e.args[0]})
 
         # Update topic, if needed
         if cur_topic != topic:
             cur_topic = topic
-            db = load_database(vars, embedding)
+            pdf_db = csv_db = txt_db = None
+            if os.listdir(vars["roots"]["PDF_ROOT"]):
+                pdf_db = load_database(vars, embedding, "pdf")
+            if os.listdir(vars["roots"]["CSV_ROOT"]):
+                csv_db = load_database(vars, embedding, "csv")
+            if os.listdir(vars["roots"]["TXT_ROOT"]):
+                txt_db = load_database(vars, embedding, "txt")
 
         # Update embedding model, if needed
         if updates["embedding_choice"]:
@@ -279,7 +309,13 @@ def setup(topic):
                 return jsonify({"status": "error", "issue": e})
 
             try:
-                db = load_database(vars, embedding)
+                pdf_db = csv_db = txt_db = None
+                if os.listdir(vars["roots"]["PDF_ROOT"]):
+                    pdf_db = load_database(vars, embedding, "pdf")
+                if os.listdir(vars["roots"]["CSV_ROOT"]):
+                    csv_db = load_database(vars, embedding, "csv")
+                if os.listdir(vars["roots"]["TXT_ROOT"]):
+                    txt_db = load_database(vars, embedding, "txt")
             except Exception as e:
                 return jsonify({"status": "error", "issue": e.args[0]})
 
@@ -289,7 +325,13 @@ def setup(topic):
             vars["chunk_overlap"] = chunk_overlap
             vars["args"].refresh_db = refresh_db
             try:
-                db = load_database(vars, embedding)
+                pdf_db = csv_db = txt_db = None
+                if os.listdir(vars["roots"]["PDF_ROOT"]):
+                    pdf_db = load_database(vars, embedding, "pdf")
+                if os.listdir(vars["roots"]["CSV_ROOT"]):
+                    csv_db = load_database(vars, embedding, "csv")
+                if os.listdir(vars["roots"]["TXT_ROOT"]):
+                    txt_db = load_database(vars, embedding, "txt")
             except Exception as e:
                 return jsonify({"status": "error", "issue": e.args[0]})
 
@@ -307,7 +349,7 @@ def setup(topic):
 
 @app.route("/response/<topic>", methods=["POST"])
 def response(topic):
-    global vars, db, model
+    global vars, pdf_db, csv_db, txt_db, model
 
     # Get needed variables
     roots = vars["roots"]
@@ -342,7 +384,7 @@ def response(topic):
 
     # Get response from RAG system
     try:
-        response_dict = get_response(vars, db, model, user_query, user_history, no_context, chain_of_agents)
+        response_dict = get_response(vars, model, pdf_db, csv_db, txt_db, user_query, user_history, no_context, chain_of_agents)
     except Exception as e:
         return jsonify({"status": "error", "issue": e})
     response = response_dict["response"]
