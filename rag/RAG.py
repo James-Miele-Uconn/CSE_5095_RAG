@@ -74,9 +74,6 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_pdfs
     roots["CSV_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "csv_files\\")
     roots["TXT_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "txt_files\\")
     roots["CHROMA_ROOT"] = os.path.join(roots["TOPIC_ROOT"], "chroma_db_files\\")
-    roots["PDF_DB_ROOT"] = os.path.join(roots["CHROMA_ROOT"], "pdf\\")
-    roots["CSV_DB_ROOT"] = os.path.join(roots["CHROMA_ROOT"], "csv\\")
-    roots["TXT_DB_ROOT"] = os.path.join(roots["CHROMA_ROOT"], "txt\\")
     roots["MODIFIED_ROOT"] = os.path.join(roots["CHROMA_ROOT"], "(0)modified-times\\")
     roots["API_ROOT"] = os.path.join(roots["TOPIC_ROOT"], "api_keys\\")
 
@@ -85,9 +82,6 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_pdfs
         "TOPIC_ROOT",
         "API_ROOT",
         "CHROMA_ROOT",
-        "PDF_DB_ROOT",
-        "CSV_DB_ROOT",
-        "TXT_DB_ROOT",
         "MODIFIED_ROOT",
         "CONTEXT_ROOT",
         "PDF_ROOT",
