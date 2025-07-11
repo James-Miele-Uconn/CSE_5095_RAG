@@ -234,28 +234,36 @@ def setup_layout(vars, css, saved_color, theme, cur_layout, saved_avatar_size, s
                         value=False
                     )
                     with gr.Accordion(label="Chunk Options", open=False):
-                        num_pdfs = gr.Slider(
+                        num_papers = gr.Slider(
                             1,
                             10,
-                            value=3,
+                            value=2,
                             step=1,
-                            label="Number of pdf chunks",
+                            label="Number of paper chunks",
                             visible=True
                         )
-                        num_csvs = gr.Slider(
+                        num_spearmans = gr.Slider(
                             1,
                             10,
-                            value=3,
+                            value=2,
                             step=1,
-                            label="Number of csv chunks",
+                            label="Number of spearman chunks",
                             visible=True
                         )
-                        num_txts = gr.Slider(
+                        num_expressions = gr.Slider(
                             1,
                             10,
-                            value=3,
+                            value=2,
                             step=1,
-                            label="Number of txt chunks",
+                            label="Number of expression level chunks",
+                            visible=True
+                        )
+                        num_bps = gr.Slider(
+                            1,
+                            10,
+                            value=2,
+                            step=1,
+                            label="Number of biological process chunks",
                             visible=True
                         )
 
@@ -341,9 +349,10 @@ def setup_layout(vars, css, saved_color, theme, cur_layout, saved_avatar_size, s
                             embedding_choice,
                             model_choice,
                             no_context,
-                            num_pdfs,
-                            num_csvs,
-                            num_txts,
+                            num_papers,
+                            num_spearmans,
+                            num_expressions,
+                            num_bps,
                             chain_of_agents,
                             chunk_size,
                             chunk_overlap,
@@ -543,7 +552,7 @@ def setup_layout(vars, css, saved_color, theme, cur_layout, saved_avatar_size, s
         # Handle general options
         embedding_type.change(update_embedding_opts, inputs=[embedding_type], outputs=[embedding_choice])
         model_type.change(update_chat_opts, inputs=[model_type], outputs=[model_choice])
-        no_context.change(update_context_opts, inputs=[no_context], outputs=[num_pdfs, num_csvs, num_txts, chain_of_agents])
+        no_context.change(update_context_opts, inputs=[no_context], outputs=[num_papers, num_spearmans, num_expressions, num_bps, chain_of_agents])
         refresh_db.change(show_chunk_opts, inputs=[refresh_db], outputs=[chunk_size, chunk_overlap, reset_chunk_opts])
         reset_chunk_opts.click(chunk_opt_defaults, outputs=[chunk_size, chunk_overlap])
 

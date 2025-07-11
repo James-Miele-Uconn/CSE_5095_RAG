@@ -33,9 +33,9 @@ def update_chat_opts(model_type):
 # Update context options
 def update_context_opts(no_context):
     if no_context:
-        new_opts = [gr.Slider(visible=False), gr.Slider(visible=False), gr.Slider(visible=False), gr.Checkbox(visible=False)]
+        new_opts = [gr.Slider(visible=False), gr.Slider(visible=False), gr.Slider(visible=False), gr.Slider(visible=False), gr.Checkbox(visible=False)]
     else:
-        new_opts = [gr.Slider(visible=True), gr.Slider(visible=True), gr.Slider(visible=True), gr.Checkbox(visible=True)]
+        new_opts = [gr.Slider(visible=True), gr.Slider(visible=True), gr.Slider(visible=True), gr.Slider(visible=True), gr.Checkbox(visible=True)]
     
     return new_opts
 

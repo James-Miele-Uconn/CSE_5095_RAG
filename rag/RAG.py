@@ -28,25 +28,27 @@ def parse_rag_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--embedding", metavar="", help="\twhat embedding model to use. Default is mxbai-embed-large.", default="mxbai-embed-large", type=str)
     parser.add_argument("--model", metavar="", help="\twhat chat model to use. Default is deepseek-r1:32b", default="deepseek-r1:7b", type=str)
-    parser.add_argument("--num_pdfs", metavar="", help="\thow many pdf context chunks to use. Default is 3 chunks.", default=3, type=int)
-    parser.add_argument("--num_csvs", metavar="", help="\thow many csv context chunks to use. Default is 3 chunks.", default=3, type=int)
-    parser.add_argument("--num_txts", metavar="", help="\thow many txt context chunks to use. Default is 3 chunks.", default=3, type=int)
+    parser.add_argument("--num_papers", metavar="", help="\thow many paper context chunks to use. Default is 2 chunks.", default=2, type=int)
+    parser.add_argument("--num_spearmans", metavar="", help="\thow many spearman context chunks to use. Default is 2 chunks.", default=2, type=int)
+    parser.add_argument("--num_expressions", metavar="", help="\thow many expression level context chunks to use. Default is 2 chunks.", default=2, type=int)
+    parser.add_argument("--num_bps", metavar="", help="\thow many biological process context chunks to use. Default is 2 chunks.", default=2, type=int)
     parser.add_argument("--refresh_db", help="\tforce the database to be remade.", action="store_true")
     args = parser.parse_args()
 
     return args
 
 
-def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_pdfs=None, num_csvs=None, num_txts=None, only_roots=False):
+def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_papers=None, num_spearmans=None, num_expressions=None, num_bps=None, only_roots=False):
     """Define setup variables.
 
     Args:
       topic: Which directory to use for context and database files.
       embedding_choice: Which embedding model to use. Defaults to None, to be overwritten.
       model_choice: Which chat model to use. Defaults to None, to be overwritten.
-      num_pdfs: Number of pdf chunks to use for answers. Defaults to None, as a flag for argparse.
-      num_csvs: Number of csv chunks to use for answers. Defaults to None, as a flag for argparse.
-      num_txts: Number of txt chunks to use for answers. Defaults to None, as a flag for argparse.
+      num_papers: Number of paper chunks to use for answers. Defaults to None, as a flag for argparse.
+      num_spearmans: Number of spearman chunks to use for answers. Defaults to None, as a flag for argparse.
+      num_expressions: Number of expression level chunks to use for answers. Defaults to None, as a flag for argparse.
+      num_bps: Number of biological process chunks to use for answers. Defaults to None, as a flag for argparse.
       only_roots: Whether to only return roots. Defaults to False.
 
     Returns:
@@ -56,12 +58,14 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_pdfs
     args = parse_rag_arguments()
 
     # Modify chunk options if needed
-    if num_pdfs is not None:
-        args.num_pdfs = num_pdfs
-    if num_csvs is not None:
-        args.num_csvs = num_csvs
-    if num_txts is not None:
-        args.num_txts = num_txts
+    if num_papers is not None:
+        args.num_papers = num_papers
+    if num_spearmans is not None:
+        args.num_spearmans = num_spearmans
+    if num_expressions is not None:
+        args.num_expressions = num_expressions
+    if num_bps is not None:
+        args.num_bps = num_bps
 
     # Set directories to be used
     roots = dict()
@@ -70,9 +74,10 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_pdfs
     roots["SERVER_ROOT"] = os.path.abspath(os.path.dirname(__file__))
     roots["TOPIC_ROOT"] = os.path.join(roots["SERVER_ROOT"], f"{topic}\\")
     roots["CONTEXT_ROOT"] = os.path.join(roots["TOPIC_ROOT"], "context_files\\")
-    roots["PDF_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "pdf_files\\")
-    roots["CSV_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "csv_files\\")
-    roots["TXT_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "txt_files\\")
+    roots["PAPER_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "paper_files\\")
+    roots["SPEARMAN_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "spearman_files\\")
+    roots["EXPRESSION_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "expression_files\\")
+    roots["BP_ROOT"] = os.path.join(roots["CONTEXT_ROOT"], "bp_files\\")
     roots["CHROMA_ROOT"] = os.path.join(roots["TOPIC_ROOT"], "chroma_db_files\\")
     roots["MODIFIED_ROOT"] = os.path.join(roots["CHROMA_ROOT"], "(0)modified-times\\")
     roots["API_ROOT"] = os.path.join(roots["TOPIC_ROOT"], "api_keys\\")
@@ -84,9 +89,10 @@ def get_vars(topic="Default", embedding_choice=None, model_choice=None, num_pdfs
         "CHROMA_ROOT",
         "MODIFIED_ROOT",
         "CONTEXT_ROOT",
-        "PDF_ROOT",
-        "CSV_ROOT",
-        "TXT_ROOT"
+        "PAPER_ROOT",
+        "SPEARMAN_ROOT",
+        "EXPRESSION_ROOT",
+        "BP_ROOT"
     ]
     for root in ordered_roots:
         if not os.path.exists(roots[root]):
@@ -202,12 +208,14 @@ def load_and_chunk(splitter, loc):
       Chunked documents
     """
     # Determine what loader to use
-    if "pdf" in loc:
+    if "paper" in loc:
         loader = PyPDFDirectoryLoader(loc)
-    elif "csv" in loc:
+    elif "spearman" in loc:
         loader = DirectoryLoader(loc, loader_cls=CSVLoader)
-    elif "txt" in loc:
-        loader = DirectoryLoader(loc, loader_cls=TextLoader)
+    elif "expression" in loc:
+        loader = DirectoryLoader(loc, loader_cls=CSVLoader)
+    elif "bp" in loc:
+        loader = DirectoryLoader(loc, loader_cls=CSVLoader)
     else:
         loader = None
 
@@ -330,15 +338,16 @@ def load_model(vars):
     return model
 
 
-def get_response(vars, model, pdf_db=None, csv_db=None, txt_db=None, user_query=None, user_history=None, no_context=None, chain_of_agents=False):
+def get_response(vars, model, paper_db=None, spearman_db=None, expression_db=None, bp_db=None, user_query=None, user_history=None, no_context=None, chain_of_agents=False):
     """Given input and some desired response type, create a prompt and receive a response.
 
     Args:
       vars: Dictionary containing setup variables.
       model: Chat model to use.
-      pdf_db: The colleciton of pdf documents to use for RAG. Defaults to None.
-      csv_db: The colleciton of csv documents to use for RAG. Defaults to None.
-      txt_db: The colleciton of txt documents to use for RAG. Defaults to None.
+      paper_db: The colleciton of paper documents to use for RAG. Defaults to None.
+      spearman_db: The colleciton of spearman documents to use for RAG. Defaults to None.
+      expression_db: The colleciton of expression level documents to use for RAG. Defaults to None.
+      bp_db: The collection of biological process documents to use for RAG. Defaults to None.
       user_query: The query to give to the chat model. Defaults to None.
       user_history: The history to give to the chat model. Defaults to False.
       no_context: Whether the RAG system should be used. Defaults to None.
@@ -367,23 +376,28 @@ def get_response(vars, model, pdf_db=None, csv_db=None, txt_db=None, user_query=
             prompt = prompt_template.format(history=user_history, message=user_query)
         else:
             # Get context information
-            pdf_context_chunks = []
-            if pdf_db is not None:
-                cur_pdf_chunks = pdf_db.similarity_search_with_score(user_query, k=args.num_pdfs)
-                pdf_context_chunks = [chunk.page_content for chunk, _score in cur_pdf_chunks]
+            paper_context_chunks = []
+            if paper_db is not None:
+                cur_paper_chunks = paper_db.similarity_search_with_score(user_query, k=args.num_papers)
+                paper_context_chunks = [chunk.page_content for chunk, _score in cur_paper_chunks]
 
-            csv_context_chunks = []
-            if csv_db is not None:
-                cur_csv_chunks = csv_db.similarity_search_with_score(user_query, k=args.num_csvs)
-                csv_context_chunks = [chunk.page_content for chunk, _score in cur_csv_chunks]
+            spearman_context_chunks = []
+            if spearman_db is not None:
+                cur_spearman_chunks = spearman_db.similarity_search_with_score(user_query, k=args.num_spearmans)
+                spearman_context_chunks = [chunk.page_content for chunk, _score in cur_spearman_chunks]
 
-            txt_context_chunks = []
-            if txt_db is not None:
-                cur_txt_chunks = txt_db.similarity_search_with_score(user_query, k=args.num_txts)
-                txt_context_chunks = [chunk.page_content for chunk, _score in cur_txt_chunks]
+            expression_context_chunks = []
+            if expression_db is not None:
+                cur_expression_chunks = expression_db.similarity_search_with_score(user_query, k=args.num_expressions)
+                expression_context_chunks = [chunk.page_content for chunk, _score in cur_expression_chunks]
+
+            bp_context_chunks = []
+            if bp_db is not None:
+                cur_bp_chunks = bp_db.similarity_search_with_score(user_query, k=args.num_bps)
+                bp_context_chunks = [chunk.page_content for chunk, _score in cur_bp_chunks]
 
             # Create context text
-            context_text = "\n\n".join(pdf_context_chunks + csv_context_chunks + txt_context_chunks)
+            context_text = "\n\n".join(paper_context_chunks + spearman_context_chunks + expression_context_chunks + bp_context_chunks)
 
             # Set up prompt
             prompt_template = """
@@ -411,23 +425,28 @@ def get_response(vars, model, pdf_db=None, csv_db=None, txt_db=None, user_query=
             prompt = prompt_template.format(message=user_query)
         else:
             # Get context information
-            pdf_context_chunks = []
-            if pdf_db is not None:
-                cur_pdf_chunks = pdf_db.similarity_search_with_score(user_query, k=args.num_pdfs)
-                pdf_context_chunks = [chunk.page_content for chunk, _score in cur_pdf_chunks]
+            paper_context_chunks = []
+            if paper_db is not None:
+                cur_paper_chunks = paper_db.similarity_search_with_score(user_query, k=args.num_papers)
+                paper_context_chunks = [chunk.page_content for chunk, _score in cur_paper_chunks]
 
-            csv_context_chunks = []
-            if csv_db is not None:
-                cur_csv_chunks = csv_db.similarity_search_with_score(user_query, k=args.num_csvs)
-                csv_context_chunks = [chunk.page_content for chunk, _score in cur_csv_chunks]
+            spearman_context_chunks = []
+            if spearman_db is not None:
+                cur_spearman_chunks = spearman_db.similarity_search_with_score(user_query, k=args.num_spearmans)
+                spearman_context_chunks = [chunk.page_content for chunk, _score in cur_spearman_chunks]
 
-            txt_context_chunks = []
-            if txt_db is not None:
-                cur_txt_chunks = txt_db.similarity_search_with_score(user_query, k=args.num_txts)
-                txt_context_chunks = [chunk.page_content for chunk, _score in cur_txt_chunks]
+            expression_context_chunks = []
+            if expression_db is not None:
+                cur_expression_chunks = expression_db.similarity_search_with_score(user_query, k=args.num_expressions)
+                expression_context_chunks = [chunk.page_content for chunk, _score in cur_expression_chunks]
+
+            bp_context_chunks = []
+            if bp_db is not None:
+                cur_bp_chunks = bp_db.similarity_search_with_score(user_query, k=args.num_bps)
+                bp_context_chunks = [chunk.page_content for chunk, _score in cur_bp_chunks]
 
             # Create context text
-            context_text = "\n\n".join(pdf_context_chunks + csv_context_chunks + txt_context_chunks)
+            context_text = "\n\n".join(paper_context_chunks + spearman_context_chunks + expression_context_chunks + bp_context_chunks)
 
             # Set up prompt
             prompt_template = """

@@ -10,9 +10,10 @@ app = Flask(__name__)
 # Global variables to use
 vars = None
 embedding = None
-pdf_db = None
-csv_db = None
-txt_db = None
+paper_db = None
+spearman_db = None
+expression_db = None
+bp_db = None
 model = None
 cur_topic = None
 
@@ -81,7 +82,7 @@ def purge_api_keys(topic):
 
 @app.route("/delete_topic/<topic>", methods=["POST"])
 def delete_topic(topic):
-    global vars, embedding, pdf_db, csv_db, txt_db, cur_topic
+    global vars, embedding, paper_db, spearman_db, expression_db, bp_db, cur_topic
 
     # Get data from request
     embedding_choice = request.form["embedding_choice"]
@@ -92,27 +93,34 @@ def delete_topic(topic):
 
     # Reset settings to Default topic
     embedding = load_embedding(vars)
-    if pdf_db is not None:
-        pdf_db._client.delete_collection(embedding_choice)
-        pdf_db._client.clear_system_cache()
-        pdf_db._client.reset()
-        del pdf_db
+    if paper_db is not None:
+        paper_db._client.delete_collection(embedding_choice)
+        paper_db._client.clear_system_cache()
+        paper_db._client.reset()
+        del paper_db
         gc.collect()
-        pdf_db = None
-    if csv_db is not None:
-        csv_db._client.delete_collection(embedding_choice)
-        csv_db._client.clear_system_cache()
-        csv_db._client.reset()
-        del csv_db
+        paper_db = None
+    if spearman_db is not None:
+        spearman_db._client.delete_collection(embedding_choice)
+        spearman_db._client.clear_system_cache()
+        spearman_db._client.reset()
+        del spearman_db
         gc.collect()
-        csv_db = None
-    if txt_db is not None:
-        txt_db._client.delete_collection(embedding_choice)
-        txt_db._client.clear_system_cache()
-        txt_db._client.reset()
-        del txt_db
+        spearman_db = None
+    if expression_db is not None:
+        expression_db._client.delete_collection(embedding_choice)
+        expression_db._client.clear_system_cache()
+        expression_db._client.reset()
+        del expression_db
         gc.collect()
-        txt_db = None
+        expression_db = None
+    if bp_db is not None:
+        bp_db._client.delete_collection(embedding_choice)
+        bp_db._client.clear_system_cache()
+        bp_db._client.reset()
+        del bp_db
+        gc.collect()
+        bp_db = None
     cur_topic = "Default"
 
     # Remove old topic files
@@ -126,11 +134,11 @@ def delete_topic(topic):
 
 @app.route("/new_topic/<topic>", methods=["POST"])
 def new_topic(topic):
-    global vars, embedding, pdf_db, csv_db, txt_db, cur_topic
+    global vars, embedding, paper_db, spearman_db, expression_db, bp_db, cur_topic
 
     # Set settings to new topic
     get_vars(topic, only_roots=True)
-    pdf_db = csv_db = txt_db = None
+    paper_db = spearman_db = expression_db = bp_db = None
     cur_topic = topic
 
     return jsonify({"status": "ok"})
@@ -145,11 +153,13 @@ def context(topic):
 
     # add all files to output
     output = []
-    for file in os.listdir(roots["PDF_ROOT"]):
+    for file in os.listdir(roots["PAPER_ROOT"]):
         output.append(file)
-    for file in os.listdir(roots["CSV_ROOT"]):
+    for file in os.listdir(roots["SPEARMAN_ROOT"]):
         output.append(file)
-    for file in os.listdir(roots["TXT_ROOT"]):
+    for file in os.listdir(roots["EXPRESSION_ROOT"]):
+        output.append(file)
+    for file in os.listdir(roots["BP_ROOT"]):
         output.append(file)
     
     return jsonify({'files': output})
@@ -221,15 +231,16 @@ def upload_file(topic):
 
 @app.route("/setup/<topic>", methods=["POST"])
 def setup(topic):
-    global vars, embedding, pdf_db, csv_db, txt_db, model, cur_topic
+    global vars, embedding, paper_db, spearman_db, expression_db, bp_db, model, cur_topic
 
     # Get variables from frontend
     cur_vars = {"embedding_choice": None, "model_choice": None}
     cur_vars["embedding_choice"] = request.form["embedding_choice"]
     cur_vars["model_choice"] = request.form["model_choice"]
-    num_pdfs = int(request.form["num_pdfs"])
-    num_csvs = int(request.form["num_csvs"])
-    num_txts = int(request.form["num_txts"])
+    num_papers = int(request.form["num_papers"])
+    num_spearmans = int(request.form["num_spearmans"])
+    num_expressions = int(request.form["num_expressions"])
+    num_bps = int(request.form["num_bps"])
     chunk_size = int(request.form["chunk_size"])
     chunk_overlap = int(request.form["chunk_overlap"])
     refresh_db = eval(request.form["refresh_db"])
@@ -241,9 +252,9 @@ def setup(topic):
         chunk_overlap = 0
 
     # Check if initial setup should happen
-    if (vars is None) or (embedding is None) or (pdf_db is None) or (csv_db is None) or (txt_db is None) or (model is None):
+    if (vars is None) or (embedding is None) or (paper_db is None) or (spearman_db is None) or (expression_db is None) or (bp_db is None) or (model is None):
         try:
-            vars = get_vars(topic, cur_vars["embedding_choice"], cur_vars["model_choice"], num_pdfs, num_csvs, num_txts)
+            vars = get_vars(topic, cur_vars["embedding_choice"], cur_vars["model_choice"], num_papers, num_spearmans, num_expressions, num_bps)
         except Exception as e:
             return jsonify({"status": "error", "issue": e.args[0]})
         vars["chunk_size"] = chunk_size
@@ -258,13 +269,15 @@ def setup(topic):
             return jsonify({"status": "error", "issue": e})
 
         try:
-            pdf_db = csv_db = txt_db = None
-            if os.listdir(vars["roots"]["PDF_ROOT"]):
-                pdf_db = load_database(vars, embedding, "pdf")
-            if os.listdir(vars["roots"]["CSV_ROOT"]):
-                csv_db = load_database(vars, embedding, "csv")
-            if os.listdir(vars["roots"]["TXT_ROOT"]):
-                txt_db = load_database(vars, embedding, "txt")
+            paper_db = spearman_db = expression_db = bp_db = None
+            if os.listdir(vars["roots"]["PAPER_ROOT"]):
+                paper_db = load_database(vars, embedding, "paper")
+            if os.listdir(vars["roots"]["SPEARMAN_ROOT"]):
+                spearman_db = load_database(vars, embedding, "spearman")
+            if os.listdir(vars["roots"]["EXPRESSION_ROOT"]):
+                expression_db = load_database(vars, embedding, "expression")
+            if os.listdir(vars["roots"]["BP_ROOT"]):
+                bp_db = load_database(vars, embedding, "bp")
         except Exception as e:
             return jsonify({"status": "error", "issue": e})
 
@@ -284,20 +297,22 @@ def setup(topic):
                 updates[var] = True
         
         try:
-            vars = get_vars(topic, cur_vars["embedding_choice"], cur_vars["model_choice"], num_pdfs, num_csvs, num_txts)
+            vars = get_vars(topic, cur_vars["embedding_choice"], cur_vars["model_choice"], num_papers, num_spearmans, num_expressions, num_bps)
         except Exception as e:
             return jsonify({"status": "error", "issue": e.args[0]})
 
         # Update topic, if needed
         if cur_topic != topic:
             cur_topic = topic
-            pdf_db = csv_db = txt_db = None
-            if os.listdir(vars["roots"]["PDF_ROOT"]):
-                pdf_db = load_database(vars, embedding, "pdf")
-            if os.listdir(vars["roots"]["CSV_ROOT"]):
-                csv_db = load_database(vars, embedding, "csv")
-            if os.listdir(vars["roots"]["TXT_ROOT"]):
-                txt_db = load_database(vars, embedding, "txt")
+            paper_db = spearman_db = expression_db = bp_db = None
+            if os.listdir(vars["roots"]["PAPER_ROOT"]):
+                paper_db = load_database(vars, embedding, "paper")
+            if os.listdir(vars["roots"]["SPEARMAN_ROOT"]):
+                spearman_db = load_database(vars, embedding, "spearman")
+            if os.listdir(vars["roots"]["EXPRESSION_ROOT"]):
+                expression_db = load_database(vars, embedding, "expression")
+            if os.listdir(vars["roots"]["BP_ROOT"]):
+                bp_db = load_database(vars, embedding, "bp")
 
         # Update embedding model, if needed
         if updates["embedding_choice"]:
@@ -309,13 +324,15 @@ def setup(topic):
                 return jsonify({"status": "error", "issue": e})
 
             try:
-                pdf_db = csv_db = txt_db = None
-                if os.listdir(vars["roots"]["PDF_ROOT"]):
-                    pdf_db = load_database(vars, embedding, "pdf")
-                if os.listdir(vars["roots"]["CSV_ROOT"]):
-                    csv_db = load_database(vars, embedding, "csv")
-                if os.listdir(vars["roots"]["TXT_ROOT"]):
-                    txt_db = load_database(vars, embedding, "txt")
+                paper_db = spearman_db = expression_db = bp_db = None
+                if os.listdir(vars["roots"]["PAPER_ROOT"]):
+                    paper_db = load_database(vars, embedding, "paper")
+                if os.listdir(vars["roots"]["SPEARMAN_ROOT"]):
+                    spearman_db = load_database(vars, embedding, "spearman")
+                if os.listdir(vars["roots"]["EXPRESSION_ROOT"]):
+                    expression_db = load_database(vars, embedding, "expression")
+                if os.listdir(vars["roots"]["BP_ROOT"]):
+                    bp_db = load_database(vars, embedding, "bp")
             except Exception as e:
                 return jsonify({"status": "error", "issue": e.args[0]})
 
@@ -325,13 +342,15 @@ def setup(topic):
             vars["chunk_overlap"] = chunk_overlap
             vars["args"].refresh_db = refresh_db
             try:
-                pdf_db = csv_db = txt_db = None
-                if os.listdir(vars["roots"]["PDF_ROOT"]):
-                    pdf_db = load_database(vars, embedding, "pdf")
-                if os.listdir(vars["roots"]["CSV_ROOT"]):
-                    csv_db = load_database(vars, embedding, "csv")
-                if os.listdir(vars["roots"]["TXT_ROOT"]):
-                    txt_db = load_database(vars, embedding, "txt")
+                paper_db = spearman_db = expression_db = bp_db = None
+                if os.listdir(vars["roots"]["PAPER_ROOT"]):
+                    paper_db = load_database(vars, embedding, "paper")
+                if os.listdir(vars["roots"]["SPEARMAN_ROOT"]):
+                    spearman_db = load_database(vars, embedding, "spearman")
+                if os.listdir(vars["roots"]["EXPRESSION_ROOT"]):
+                    expression_db = load_database(vars, embedding, "expression")
+                if os.listdir(vars["roots"]["BP_ROOT"]):
+                    bp_db = load_database(vars, embedding, "bp")
             except Exception as e:
                 return jsonify({"status": "error", "issue": e.args[0]})
 
@@ -349,7 +368,7 @@ def setup(topic):
 
 @app.route("/response/<topic>", methods=["POST"])
 def response(topic):
-    global vars, pdf_db, csv_db, txt_db, model
+    global vars, paper_db, spearman_db, expression_db, bp_db, model
 
     # Get needed variables
     roots = vars["roots"]
@@ -376,7 +395,7 @@ def response(topic):
 
     # Determine if all context directories are empty when using RAG system
     if not no_context:
-        context_roots = ["PDF_ROOT", "CSV_ROOT", "TXT_ROOT"]
+        context_roots = ["PAPER_ROOT", "SPEARMAN_ROOT", "EXPRESSION_ROOT", "BP_ROOT"]
         has_context = [bool(os.listdir(roots[root])) for root in context_roots]
         need_context = not any(has_context)
         if need_context:
@@ -384,7 +403,7 @@ def response(topic):
 
     # Get response from RAG system
     try:
-        response_dict = get_response(vars, model, pdf_db, csv_db, txt_db, user_query, user_history, no_context, chain_of_agents)
+        response_dict = get_response(vars, model, paper_db, spearman_db, expression_db, bp_db, user_query, user_history, no_context, chain_of_agents)
     except Exception as e:
         return jsonify({"status": "error", "issue": e})
     response = response_dict["response"]
