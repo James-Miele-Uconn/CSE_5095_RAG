@@ -56,7 +56,7 @@ def run_rag(message, history, rag_ip, rag_port, history_uploaded, context_change
 
     if use_history and history:
         # Summarize history
-        history = "\n\n".join([msg["content"] for msg in history])
+        history = "\n\n".join([msg["content"] for msg in history if msg["metadata"] is None])
         hist_info = {"user_history": history}
         resp = requests.post(f"http://{rag_ip}:{rag_port}/response/{cur_topic}", data=hist_info)
         hist_resp = resp.json()
